@@ -1,6 +1,6 @@
 import { Leaf } from '../src';
 
-import { inspect } from 'util';
+// import { inspect } from 'util';
 
 describe('Leaf', () => {
   describe('constructor', () => {
@@ -33,6 +33,7 @@ describe('Leaf', () => {
             },
           }
         );
+
         expect(point.version).toBe(0);
         expect(point.value).toEqual({ x: 0, y: 0, z: 0 });
 
@@ -57,20 +58,18 @@ describe('Leaf', () => {
           }
         );
 
-        console.log('nested change:');
         point.next({ x: 1, y: 4, z: 9 });
 
         expect(point.value).toEqual({ x: 1, y: 4, z: 9 });
+
         expect(point.version).toBe(4);
 
-        console.log('after multi-ad:', inspect(point));
-
         expect(point.branch('x').value).toBe(1);
-        expect(point.branch('x').version).toBe(2);
+        expect(point.branch('x').version).toBe(1);
         expect(point.branch('y').value).toBe(4);
-        expect(point.branch('y').version).toBe(3);
+        expect(point.branch('y').version).toBe(1);
         expect(point.branch('z').value).toBe(9);
-        expect(point.branch('z').version).toBe(4);
+        expect(point.branch('z').version).toBe(1);
       });
 
       describe('rollback', () => {

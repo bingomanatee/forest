@@ -1,20 +1,37 @@
 export class Change {
   constructor(value: any, target: any) {
     this.value = value;
+    this.versionBeforeChange = target.version;
     this.target = target;
-    this.error = null;
+    this._error = null;
     this.status = 'live';
   }
+
   public target: any;
   public value: any;
-  public error: any;
+  private _error: any;
   public status: string;
+  public versionBeforeChange: number;
+  get error(): any {
+    return this._error;
+  }
+
+  set error(value: any) {
+    if (this.status !== 'live') return;
+    this.status = 'error';
+    this._error = value;
+  }
 
   stop() {
     if (this.status === 'live') this.status = 'stopped';
   }
 
+  complete() {
+    this.target.e.emit('change-complete', this);
+    this.stop();
+  }
+
   get isStopped() {
-    return !!(this.error || this.status !== 'live');
+    return !!(this._error || this.status !== 'live');
   }
 }
