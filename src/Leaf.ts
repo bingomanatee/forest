@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/camelcase,@typescript-eslint/no-this-alias */
 import EventEmitter from 'emitix';
-import { Subject, SubjectLike } from 'rxjs';
+import { BehaviorSubject, Subject, SubjectLike } from 'rxjs';
 import { Change } from './Change';
 import {
   getKey,
@@ -10,23 +10,27 @@ import {
   typeOfValue,
   isThere,
   hasKey,
+  e,
 } from './utils';
 import { ABSENT } from './constants';
 
 const NO_VALUE = Symbol('no value');
 
 export default class Leaf {
+
   constructor(value: any, opts: any = {}) {
     this._e = new EventEmitter();
     this.value = value;
     this._version = 0;
+    this._history = new Map();
     this._highestVersion = 0;
     this._subject = new Subject();
+    this._transList = [];
+    this._transSubject = new BehaviorSubject(new Set());
     this.config(opts);
 
     this._listenForChangeComplete();
     this._listenForUpdated();
-    this._history = new Map();
     this.snapshot();
   }
 
@@ -117,6 +121,7 @@ export default class Leaf {
         value instanceof Leaf ? value : new Leaf(value, { parent: this, name });
       branch.config({ name, parent: this });
       this.branches.set(name, branch);
+      // chain-broadcast up the tree
       branch.on('updated', () => {
         this.updateFromBranch(name);
         this.broadcast();
@@ -166,7 +171,7 @@ export default class Leaf {
     return this._value;
   }
 
-  protected set value(value: any) {
+  set value(value: any) {
     this._value = value;
     if (!isThere(this.type)) {
       this.type = typeOfValue(value);
@@ -182,67 +187,148 @@ export default class Leaf {
     });
   }
 
-  _getBranchChanges(value) {
+  /**
+   * get a map of change objects for each property in value
+   * that has been changed by the value from the current value of that branch.
+   *
+   * If there are no branches, or none of the branch fields have been changed,
+   * this method will return an empty Map.
+   * @param value
+   */
+  _getBranchChanges(value): Map<any, any> {
     const branchChanges = new Map();
 
     if (this._branches) {
-      this.branches.forEach((_, name) => {
+      this.branches.forEach((branch, name) => {
         //@TODO: type test now?
         if (hasKey(value, name, this.type)) {
-          const branchValue = getKey(value, name, this.type);
-          branchChanges.set(name, branchValue);
+          const newValue = getKey(value, name, this.type);
+          if (newValue !== branch.value) {
+            branchChanges.set(name, newValue);
+          }
         }
       });
     }
     return branchChanges;
   }
 
-  _prepChanges(value, branchChanges: Map<any, any>) {
-    const change = new Change(value, this);
-    const changes = [change];
+  _prepChanges(value) {
+    const branchChanges = this._getBranchChanges(value);
+    const rootChange = new Change(value, this);
+    /*
+    note - rootChange will/should be redundant with any observed branchChanges.
+    */
 
-    const pbcKeys = Array.from(branchChanges.keys());
-    for (let i = 0; i < pbcKeys.length; ++i) {
-      const branchKey = pbcKeys[i];
-      const branchValue = branchChanges.get(branchKey);
-      const branch = this.branch(branchKey);
-      const branchChange = new Change(branchValue, branch);
+    const childChanges: Change[] = [];
 
-      changes.push(branchChange);
-    }
-    return changes;
+    /*
+    transmute the keyName, newValue map returned by getBranchChanges
+    into an array of changes
+     */
+    branchChanges.forEach((newValue, branchKey) => {
+      childChanges.push(new Change(newValue, this.branch(branchKey)));
+    });
+
+    return {
+      rootChange,
+      childChanges,
+    };
   }
 
   next(value: any) {
     const valueType = typeOfValue(value);
     if (valueType !== this.type) {
-      throw Object.assign(
-        new Error(`incorrect value for leaf ${this.name || ''}`),
-        {
-          valueType,
-          branchType: this.type,
-          nextValue: value,
-        }
-      );
+      throw e(`incorrect value for leaf ${this.name || ''}`, {
+        valueType,
+        branchType: this.type,
+        nextValue: value,
+      });
     }
 
-    const branchChanges = this._getBranchChanges(value);
-    const currentVersion = this.root.version;
-    const changes = this._prepChanges(value, branchChanges);
+    /*
+    The change is split between the root change - properties /values that 
+    aren't managed by sub-branches - and childChanges - those that are.
+    childChanges may be an empty set. 
+    
+    The reason for the split is that branch leafs may have their own tests
+    that must be passed 
+     */
+    const { rootChange, childChanges } = this._prepChanges(value);
 
-    for (let c = 0; c < changes.length; ++c) {
-      const change = changes[c];
-      change.target.e.emit('change', change);
-      if (change.error) {
-        this.rollbackTo(currentVersion);
-        throw change.error;
-      }
+    this.transact(() => {
+      rootChange.target.e.emit('change', rootChange);
+      if (rootChange.error) throw rootChange.error;
+      rootChange.target.e.emit('change-complete', rootChange);
+      childChanges.forEach(childChange => {
+        childChange.target.e.emit('change', childChange);
+        if (childChange.error) throw childChange.error;
+        childChange.target.e.emit('change-complete', childChange);
+        childChange.stop();
+      });
+      rootChange.stop();
+    });
+  }
+
+  private _transSubject: SubjectLike<Set<any>>;
+  private _transList: any[];
+  get transList() {
+    return this._transList;
+  }
+  set transList(list) {
+    this._transList = list;
+    this._transSubject.next(new Set(this._transList));
+  }
+
+  /**
+   * token is an arbitrary object that is referentially unique. An object, Symbol. Not a scalar (string/number).
+   * The significant trait of token is that when you popTrans (remove it from the trans collection, it (AND ONLY IT)
+   * are removed.
+   *
+   * Note -- all transactions are managed in the root leaf.
+   * This means any transactional activity blocks all leaf activity
+   * until the root transaction collection is cleared.
+   *
+   * @param token
+   */
+  pushTrans(token: any) {
+    if (this.parent) return this.parent.pushTrans(token);
+    if (!token) return this.pushTrans(Symbol('trans'));
+
+    // this is the root, and token is .... something
+
+    this.transList = [...this.transList, token];
+    return token;
+  }
+
+  /**
+   * clear the trans from the root collection
+   * @param token
+   */
+  popTrans(token: any) {
+    if (!token) return;
+    if (this.parent) {
+      return this.parent.popTrans(token);
     }
 
-    for (let c = 0; c < changes.length; ++c) {
-      const change = changes[c];
-      change.target.e.emit('change-complete', change);
-      change.stop();
+    // at the root
+
+    // set transList to itself without token
+    this.transList = this.transList.filter(t => t !== token);
+    return token;
+  }
+
+  transact(fn) {
+    const startVersion = this.version;
+    const token = this.pushTrans(
+      Symbol(`leaf ${this.name}, version ${startVersion}`)
+    );
+    try {
+      fn();
+      this.popTrans(token);
+    } catch (err) {
+      this.rollbackTo(startVersion);
+      this.popTrans(token);
+      throw e(err, { leaf: this });
     }
   }
 
@@ -304,7 +390,7 @@ export default class Leaf {
     if (this._history) {
       const keys = Array.from(this._history.keys());
       keys.forEach(kVersion => {
-        if (typeof kVersion === 'number' && kVersion > version) {
+        if (kVersion > version) {
           this._history.delete(kVersion);
         }
       });
