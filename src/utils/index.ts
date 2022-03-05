@@ -1,5 +1,7 @@
 import { produce } from 'immer';
 const isEqual = require('lodash/isEqual');
+const clone = require('lodash/clone');
+
 import lazy from './lazy';
 
 export * from './childUtils';
@@ -14,4 +16,4 @@ function asImmer(value) {
   }
 }
 
-export { lazy, produce, isEqual, asImmer };
+export { lazy, produce, isEqual, clone, asImmer };

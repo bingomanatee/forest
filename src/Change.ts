@@ -4,21 +4,17 @@ export class Change {
     this.target = target;
     this.error = null;
     this.status = 'live';
-    this.versionTo = target.rootVersion + 1;
   }
+  public target: any;
+  public value: any;
+  public error: any;
+  public status: string;
 
-  versionTo: number;
-  target: any;
-  value: any;
-  error: any;
-  status: string;
-  private _stopped: any;
-
-  stop(reason = true) {
-    this._stopped = reason || true;
+  stop() {
+    if (this.status === 'live') this.status = 'stopped';
   }
 
   get isStopped() {
-    return !!(this.error || this._stopped);
+    return !!(this.error || this.status !== 'live');
   }
 }
