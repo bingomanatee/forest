@@ -46,7 +46,7 @@ describe('Leaf', () => {
         expect(point.version).toBe(2);
       });
 
-      it.only('should push changes to branches', () => {
+      it('should push changes to branches', () => {
         const point = new Leaf(
           {},
           {

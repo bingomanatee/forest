@@ -72,10 +72,11 @@ export default class Leaf {
   }
 
   _flushJournal() {
-    console.log('flushing journal from ', this.name);
     this._version = 0;
     this._highestVersion = 0;
     this._history.clear();
+    this._dirty = 0;
+    this.snapshot();
     this.branches.forEach(b => b._flushJournal());
   }
 
@@ -207,7 +208,7 @@ export default class Leaf {
       });
     }
     this._value = value;
-    this._dirty = this.highestVersion + 1;
+    if (this._initialized) this._dirty = this.highestVersion + 1;
   }
 
   addTest(test: (any) => any) {
@@ -217,6 +218,26 @@ export default class Leaf {
         change.error = error;
       }
     });
+  }
+
+  toJSON(network = false) {
+    if (network && this.branches.size) {
+      const out = this.toJSON();
+      out.branches = [];
+      this.branches.forEach(b => {
+        out.branches.push(b.toJSON(true));
+      });
+      return out;
+    }
+
+    return {
+      name: this.name,
+      value: this.value,
+      version: this.version,
+      history: this._history,
+      parent: this.parent ? this.parent.name : '(root)',
+      dirty: this._dirty,
+    };
   }
 
   /* ---------------------------- next ---------------------------- */
@@ -308,7 +329,7 @@ export default class Leaf {
   }
 
   _changeValue(value, direction = ABSENT) {
-    console.log('_changeValue:', this.name, value);
+
     this.transact(() => {
       const updatedValue = this._initialized
         ? value
@@ -353,7 +374,6 @@ export default class Leaf {
       this.advance(this.highestVersion + 1);
       return;
     }
-    console.log('advancing to ', version);
 
     // at this point the version is the next highest and at parent OR forward
     if (this._dirty > 0) {
@@ -519,7 +539,7 @@ export default class Leaf {
         }
       });
     }
-    if (this._dirty >= version) this._dirty = -1;
+    if (this.root._initialized && this._dirty >= version) this._dirty = -1;
   }
 
   rollbackTo(version, rollingForward = false) {
