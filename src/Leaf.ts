@@ -409,7 +409,6 @@ export default class Leaf {
    * @param token
    */
   pushTrans(token: any) {
-    if (this.parent) return this.parent.pushTrans(token);
     if (!token) return this.pushTrans(Symbol('trans'));
 
     // this is the root, and token is .... something
@@ -424,9 +423,6 @@ export default class Leaf {
    */
   popTrans(token: any) {
     if (!token) return;
-    if (this.parent) {
-      return this.parent.popTrans(token);
-    }
 
     // at the root
 
