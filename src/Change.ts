@@ -23,12 +23,16 @@ export class Change {
   }
 
   stop() {
-    if (this.status === 'live') this.status = 'stopped';
+    if (this.status === 'live') {
+      this.status = 'stopped';
+    }
   }
 
   complete() {
-    this.target.e.emit('change-complete', this);
-    this.stop();
+    if (this.status === 'live') {
+      this.target.e.emit('change-complete', this);
+      this.stop();
+    }
   }
 
   get isStopped() {

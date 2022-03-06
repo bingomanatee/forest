@@ -1,4 +1,13 @@
-import { isMap, isObj, isStr, isNumber, e } from './tests';
+import {
+  isMap,
+  isObj,
+  isStr,
+  isNumber,
+  e,
+  typeOfValue,
+  isThere,
+} from './tests';
+import { TYPE_ARRAY, TYPE_MAP, TYPE_OBJECT } from '../constants';
 
 export function toMap(m: any, force = false) {
   if (m instanceof Map) {
@@ -47,5 +56,56 @@ export function toObj(m: any, force = false) {
     });
   }
 
+  return out;
+}
+
+/**
+ * returns the union of two values, combining dictionary key/values;
+ * prefers the first parameter.
+ *
+ * for simple/scalar types returns the first parameter.
+ *
+ * @param update any
+ * @param base any
+ */
+export function makeValue(update, base) {
+  const baseType = typeOfValue(base);
+  const updateType = typeOfValue(update);
+
+  if (baseType !== updateType) {
+    const err = e('makeValue Type Mismatch', {
+      base,
+      update,
+      baseType,
+      updateType,
+    });
+
+    console.log('--- mismatch', err);
+
+    throw err;
+  }
+
+  let out = update;
+  switch (baseType) {
+    case TYPE_MAP:
+      out = new Map(base);
+      update.forEach((val, key) => {
+        out.set(key, val);
+      });
+      break;
+
+    case TYPE_OBJECT:
+      out = { ...base, ...update };
+      break;
+
+    case TYPE_ARRAY:
+      out = [...base];
+      update.forEach((val, key) => {
+        if (isThere(val)) {
+          out[key] = val;
+        }
+      });
+      break;
+  }
   return out;
 }

@@ -1,11 +1,11 @@
-let Mirror: any = null;
+let Leaf: any = null;
 
 export const setInstance = inst => {
-  Mirror = inst;
+  Leaf = inst;
 };
 
 export const isMirror = (target): boolean =>
-  !!(Mirror && target instanceof Mirror);
+  !!(Leaf && target instanceof Leaf);
 export const create = (...args) =>
   // @ts-ignore
-  Mirror !== null ? new Mirror(...args) : null;
+  Leaf !== null ? new Leaf(...args) : null;

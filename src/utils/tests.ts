@@ -3,7 +3,7 @@ import {
   NAME_UNNAMED,
   TYPE_ARRAY,
   TYPE_MAP,
-  TYPE_MIRROR,
+  TYPE_LEAF,
   TYPE_OBJECT,
   TYPE_VALUE,
 } from '../constants';
@@ -70,7 +70,7 @@ export function isStr(s, nonEmpty = false) {
 
 export function typeOfValue(value) {
   if (isMirror(value)) {
-    return TYPE_MIRROR;
+    return TYPE_LEAF;
   }
   let type = TYPE_VALUE;
   if (isMap(value)) {
