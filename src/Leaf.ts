@@ -12,6 +12,10 @@ import {
   hasKey,
   makeValue,
   e,
+  keys,
+  ucFirst,
+  isObj,
+  isFn,
 } from './utils';
 import { ABSENT, CHANGE_DOWN } from './constants';
 
@@ -28,31 +32,49 @@ export default class Leaf {
 
     this._listenForUpdated();
     this.version = 0;
-    this.snapshot();
+    this.snapshot(0);
     if (!this.root._initialized) {
       this._flushJournal();
     }
     this._initialized = true;
   }
 
+  /* ---------- identity / config ------------------ */
+  debug: any;
   _initialized = false;
+  name: any;
+
+  config(opts: any = {}) {
+    const { parent = null, branches = null, test, name, actions, debug } = opts;
+    this._parent = parent;
+
+    this.debug = debug;
+    this.name = name;
+    if (!this.name && !this.parent) {
+      this.name = '[ROOT]';
+    }
+
+    if (branches) this.addBranches(branches);
+    if (typeof test === 'function') this.addTest(test);
+
+    if (isObj(actions)) {
+      Object.keys(actions).forEach(key => {
+        const fn = actions[key];
+        if (isFn(fn)) {
+          this.addAction(key, fn);
+        } else {
+          console.warn('bad action value for ', key, ', value must be fn', fn);
+        }
+      });
+    }
+  }
+
+  /* -------------- event ------------- */
+
   protected _e: EventEmitter<any>;
 
   get e() {
     return this._e;
-  }
-
-  name: any;
-
-  config(opts: any = {}) {
-    const { parent = null, branches = null, test, name } = opts;
-    this._parent = parent;
-    this.name = name;
-    if (branches) this.addBranches(branches);
-    if (typeof test === 'function') this.addTest(test);
-    if (!this.name && !this.parent) {
-      this.name = '[ROOT]';
-    }
   }
 
   protected on(event: string, listener: (arg0: Change) => void) {
@@ -75,8 +97,8 @@ export default class Leaf {
     this._version = 0;
     this._highestVersion = 0;
     this._history.clear();
-    this._dirty = 0;
-    this.snapshot();
+    this._dirty = false;
+    this.snapshot(0);
     this.branches.forEach(b => b._flushJournal());
   }
 
@@ -178,7 +200,7 @@ export default class Leaf {
       return;
     }
     this._version = value;
-    if (value > this.highestVersion) this.highestVersion = value;
+    if (value > this.root.highestVersion) this.root.highestVersion = value;
   }
 
   get root(): Leaf {
@@ -188,7 +210,7 @@ export default class Leaf {
 
   type: symbol = ABSENT;
   private _value: any = ABSENT;
-  public _dirty = -1;
+  public _dirty = false;
 
   get value(): any {
     return this._value;
@@ -208,7 +230,7 @@ export default class Leaf {
       });
     }
     this._value = value;
-    if (this._initialized) this._dirty = this.highestVersion + 1;
+    if (this._initialized) this._dirty = true;
   }
 
   addTest(test: (any) => any) {
@@ -218,6 +240,15 @@ export default class Leaf {
         change.error = error;
       }
     });
+  }
+
+  get historyString() {
+    let out = '';
+    this.history.forEach((value, key) => {
+      out += `${key} -> ${JSON.stringify(value)}, `;
+    });
+
+    return out;
   }
 
   toJSON(network = false) {
@@ -230,14 +261,21 @@ export default class Leaf {
       return out;
     }
 
-    return {
+    const out = {
       name: this.name,
       value: this.value,
       version: this.version,
-      history: this._history,
-      parent: this.parent ? this.parent.name : '(root)',
-      dirty: this._dirty,
+      history: this.historyString,
     };
+    if (this._dirty) {
+      // @ts-ignore
+      out.dirty = true;
+    }
+    if (!this.parent || !network) {
+      // @ts-ignore
+      out.highestVersion = this.highestVersion;
+    }
+    return out;
   }
 
   /* ---------------------------- next ---------------------------- */
@@ -329,7 +367,6 @@ export default class Leaf {
   }
 
   _changeValue(value, direction = ABSENT) {
-
     this.transact(() => {
       const updatedValue = this._initialized
         ? value
@@ -359,29 +396,48 @@ export default class Leaf {
     if (!this.root._initialized) {
       this.value = value;
       return;
+    } else {
+      if (this.debug)
+        console.log('setting ', this.name, 'to', value, direction);
     }
     this._checkType(value);
 
     this._changeValue(value, direction);
+    if (this._initialized && !this.inTransaction) {
+      if (this.root.debug)
+        console.log(
+          'done with set value: ',
+          value,
+          'of ',
+          this.name,
+          'not in trans - advancing',
+          this.root.toJSON(true)
+        );
+
+      if (this.root.advance(this.highestVersion + 1)) this.broadcast();
+      if (this.root.debug)
+        console.log('--- post advance: ', this.root.toJSON(true));
+    } else {
+      if (this.root.debug)
+        console.log('---------- done with next; still in transaction');
+    }
   }
 
-  advance(version = 0, forward = false) {
-    if (!forward && this.parent) {
-      this.parent.advance();
-      return;
-    }
-    if (!version) {
-      this.advance(this.highestVersion + 1);
-      return;
-    }
+  advance(version): boolean {
+    let newDirty = false;
 
     // at this point the version is the next highest and at parent OR forward
-    if (this._dirty > 0) {
+    if (this._dirty) {
       this.version = version;
-      this._dirty = 0;
-      this.snapshot();
-      this.branches.forEach(branch => branch.advance(version, true));
+      this._dirty = false;
+      this.snapshot(version);
+      newDirty = true;
     }
+    this.branches.forEach(branch => {
+      if (branch.advance(version)) newDirty = true;
+    });
+
+    return newDirty;
   }
 
   private _transSubject: SubjectLike<Set<any>> | null = null;
@@ -391,7 +447,7 @@ export default class Leaf {
       return this.parent.transSubject;
     }
     if (!this._transSubject) {
-      this._transSubject = new BehaviorSubject(this.transList);
+      this._transSubject = new BehaviorSubject(new Set(this.transList));
     }
 
     return this._transSubject;
@@ -399,10 +455,7 @@ export default class Leaf {
 
   private _transList: any[];
   get transList() {
-    if (this.parent) {
-      return this.parent.transList;
-    }
-    return this._transList;
+    return this.root._transList;
   }
 
   /**
@@ -410,11 +463,8 @@ export default class Leaf {
    * @param list
    */
   set transList(list) {
-    if (this.parent) {
-      this.parent.translist = list;
-    } else {
-      this._transList = list;
-    }
+    if (this.debug > 1) console.log('---->>> translist = ', list);
+    this.root._transList = list;
   }
 
   /**
@@ -429,10 +479,8 @@ export default class Leaf {
    * @param token
    */
   pushTrans(token: any) {
-    if (!token) return this.pushTrans(Symbol('trans'));
-
-    // this is the root, and token is .... something
-
+    if (this.debug > 2)
+      console.log('PushTrans: ', token, 'into', this.transList);
     this.transList = [...this.transList, token];
     return token;
   }
@@ -442,11 +490,8 @@ export default class Leaf {
    * @param token
    */
   popTrans(token: any) {
-    if (!token) return;
-
-    // at the root
-
-    // set transList to itself without token
+    if (this.debug > 2)
+      console.log('popTrans: ', token, 'from', this.transList);
     this.transList = this.transList.filter(t => t !== token);
     return token;
   }
@@ -460,19 +505,16 @@ export default class Leaf {
     const token = this.pushTrans(
       Symbol(`leaf ${this.name}, version ${startVersion}`)
     );
+    let out;
     try {
-      fn();
+      out = fn();
     } catch (err) {
       this.popTrans(token);
       this.rollbackTo(startVersion);
       throw e(err, { leaf: this });
     }
     this.popTrans(token);
-
-    if (!this.inTransaction) {
-      this.advance(0);
-      this.broadcast();
-    }
+    return out;
   }
 
   private _subject: SubjectLike<any>;
@@ -490,9 +532,9 @@ export default class Leaf {
     return this._history;
   }
 
-  snapshot() {
+  snapshot(version = 0) {
     if (!this._history) this._history = new Map();
-    this._history.set(this.version, this.value);
+    this._history.set(version, this.value);
   }
 
   get isRoot() {
@@ -539,37 +581,40 @@ export default class Leaf {
         }
       });
     }
-    if (this.root._initialized && this._dirty >= version) this._dirty = -1;
   }
 
   rollbackTo(version, rollingForward = false) {
-    if (!rollingForward && this.parent) {
-      return this.parent.rollbackTo(version);
+    if (!rollingForward) {
+      if (this.debug)
+        console.log(
+          '< < < < < < rolling back ',
+          version,
+          this.root.toJSON(true)
+        );
+      this.root.rollbackTo(version, true);
+      if (this.debug) {
+        console.log('< < < < < < post rolling back: ', this.root.toJSON(true));
+      }
+      return;
     }
 
     // either  at parent, or rolling forward from parent
 
-    if (this.version <= version) {
-      // if already at or before the target,
-      // neither this branch NOR its children require rolling back
-      return;
+    if (this.version > version) {
+      // at this point we do have a value that needs to be redacted
+
+      const snap = this._getSnap(version);
+
+      if (snap !== null) {
+        this._value = snap.value;
+        this._version = snap.version;
+      }
+      this._purgeHistoryAfter(version);
     }
 
-    // at this point we do have a value that needs to be redacted
-
-    const snap = this._getSnap(version);
-
-    if (snap !== null) {
-      this.value = snap.value;
-      this._version = snap.version;
-    }
-    this._purgeHistoryAfter(version);
-
-    if (this._branches) {
-      this.branches.forEach(branch => {
-        branch.rollbackTo(version, true);
-      });
-    }
+    this.branches.forEach(branch => {
+      branch.rollbackTo(version, true);
+    });
   }
 
   _listenForUpdated() {
@@ -578,5 +623,34 @@ export default class Leaf {
         this._subject.next(this.value);
       }
     });
+  }
+
+  /* ------------------- Actions --------------------- */
+
+  private _$do;
+  get $do(): {} {
+    if (!this._$do) {
+      this._$do = {};
+      this.inferActions();
+    }
+    return this._$do;
+  }
+
+  inferActions() {
+    keys(this.value).forEach(key => {
+      this.addAction(`set${ucFirst(key)}`, (leaf, value) => {
+        return leaf.set(key, value);
+      });
+    });
+  }
+
+  addAction(name: string, fn): boolean {
+    try {
+      this.$do[name] = (...args) => this.transact(() => fn(this, ...args));
+      return true;
+    } catch (err) {
+      console.warn('cannot addAction', name, fn);
+      return false;
+    }
   }
 }

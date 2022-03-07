@@ -1,5 +1,5 @@
 import { TYPE_ARRAY, TYPE_MAP, TYPE_OBJECT, TYPE_VALUE } from '../constants';
-import { typeOfValue } from './tests';
+import { isThere, typeOfValue } from './tests';
 
 export function getKey(value: any, key: any, vType: symbol | null = null): any {
   if (!vType) {
@@ -59,4 +59,24 @@ export function setKey(
   }
 
   return value;
+}
+
+export function keys(obj, stringify = false) {
+  if (stringify) {
+    return keys(obj).map(k => `${k}`);
+  }
+  if (!isThere(obj)) {
+    return [];
+  }
+  let out = [];
+  switch (typeOfValue(obj)) {
+    case TYPE_MAP:
+      out = Array.from(obj.keys());
+      return;
+
+    case TYPE_OBJECT:
+      return Array.from(Object.keys(obj));
+      return;
+  }
+  return out;
 }

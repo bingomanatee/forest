@@ -58,6 +58,7 @@ describe('Leaf', () => {
           }
         );
 
+        expect(point.branch('x').version).toBe(0);
         point.next({ x: 1, y: 4, z: 9 });
 
         expect(point.value).toEqual({ x: 1, y: 4, z: 9 });
@@ -232,6 +233,47 @@ describe('Leaf', () => {
             expect(box.branch('topLeft.z').version).toBe(3);
           });
         });
+      });
+    });
+
+    describe('(map)', () => {
+      it('should have consistent branch values', () => {
+        const point = new Leaf(new Map(), {
+          branches: {
+            x: 0,
+            y: 0,
+            z: 0,
+          },
+        });
+
+        expect(point.version).toBe(0);
+        expect(point.value).toEqual(
+          new Map([
+            ['x', 0],
+            ['y', 0],
+            ['z', 0],
+          ])
+        );
+
+        point.branch('x').next(3);
+        expect(point.value).toEqual(
+          new Map([
+            ['x', 3],
+            ['y', 0],
+            ['z', 0],
+          ])
+        );
+        expect(point.version).toBe(1);
+
+        point.branch('y').next(6);
+        expect(point.value).toEqual(
+          new Map([
+            ['x', 3],
+            ['y', 6],
+            ['z', 0],
+          ])
+        );
+        expect(point.version).toBe(2);
       });
     });
   });
