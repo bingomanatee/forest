@@ -62,13 +62,14 @@ describe('Leaf', () => {
         point.next({ x: 1, y: 4, z: 9 });
 
         expect(point.value).toEqual({ x: 1, y: 4, z: 9 });
-
         expect(point.version).toBe(1);
 
         expect(point.branch('x').value).toBe(1);
         expect(point.branch('x').version).toBe(1);
+
         expect(point.branch('y').value).toBe(4);
         expect(point.branch('y').version).toBe(1);
+
         expect(point.branch('z').value).toBe(9);
         expect(point.branch('z').version).toBe(1);
       });

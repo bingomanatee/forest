@@ -44,6 +44,24 @@ export default class Leaf {
   _initialized = false;
   name: any;
 
+  bugLog(...args) {
+    if (this.debug) {
+      console.log(...args);
+    }
+  }
+
+  bugLogN(n, ...args) {
+    if (this.debug >= n) {
+      console.log(...args);
+    }
+  }
+
+  bugLogJ(...args) {
+    if (this.debug) {
+      console.log(...args, this.root.toJSON(true));
+    }
+  }
+
   config(opts: any = {}) {
     const { parent = null, branches = null, test, name, actions, debug } = opts;
     this._parent = parent;
@@ -166,12 +184,12 @@ export default class Leaf {
   }
 
   /*  
-        the highest version that has ever been used;
-        should be true for the entire tree,
-        as changes to any branch version cascade to the parent,
-        as do get attempts.
-        highestVersion does not decline in rollback.
-        */
+          the highest version that has ever been used;
+          should be true for the entire tree,
+          as changes to any branch version cascade to the parent,
+          as do get attempts.
+          highestVersion does not decline in rollback.
+          */
   private _highestVersion = 0;
   get highestVersion(): number {
     if (this.parent) return this.parent.highestVersion;
@@ -392,37 +410,38 @@ export default class Leaf {
     });
   }
 
+  /**
+   * updates the value of this branch.
+   * @param value
+   * @param direction
+   */
   next(value: any, direction: symbol = ABSENT) {
     if (!this.root._initialized) {
       this.value = value;
       return;
-    } else {
-      if (this.debug)
-        console.log('setting ', this.name, 'to', value, direction);
     }
+    this.bugLog('setting ', this.name, 'to', value, direction);
+
     this._checkType(value);
 
     this._changeValue(value, direction);
-    if (this._initialized && !this.inTransaction) {
-      if (this.root.debug)
-        console.log(
-          'done with set value: ',
-          value,
-          'of ',
-          this.name,
-          'not in trans - advancing',
-          this.root.toJSON(true)
-        );
+    if (!this.inTransaction) {
+      this.bugLogJ(
+        `done with set value: ${value} of ${this.name}not in trans - advancing`
+      );
 
       if (this.root.advance(this.highestVersion + 1)) this.broadcast();
-      if (this.root.debug)
-        console.log('--- post advance: ', this.root.toJSON(true));
+      this.bugLog('--- post advance: ', true);
     } else {
-      if (this.root.debug)
-        console.log('---------- done with next; still in transaction');
+      this.bugLog('---------- done with next; still in transaction');
     }
   }
 
+  /**
+   * snapshots all "dirty" branches with the passed-in version and updates the
+   * version of the branch.
+   * @param version
+   */
   advance(version): boolean {
     let newDirty = false;
 
@@ -440,8 +459,23 @@ export default class Leaf {
     return newDirty;
   }
 
+  /* -------------------- trnasactions ------------------- */
+
+  /*
+    transactions are global and managed from the root of the tree.
+    They are stored in an array and tracked in a BehaviorSubject 
+    that stores a set from that array. 
+    
+    The nature of what token is stored in the array is not really important
+    as long as its referentially unique; as such, symbols make good 
+    transaction tokens. 
+     */
+
   private _transSubject: SubjectLike<Set<any>> | null = null;
 
+  /**
+   * a broadcaster of the current state;
+   */
   get transSubject() {
     if (this.parent) {
       return this.parent.transSubject;
@@ -453,45 +487,41 @@ export default class Leaf {
     return this._transSubject;
   }
 
+  /**
+   * transList points to the root's private _transList property.
+   * @param list
+   */
+
   private _transList: any[];
   get transList() {
     return this.root._transList;
   }
 
-  /**
-   * transList is the same block list for the whole tree
-   * @param list
-   */
   set transList(list) {
-    if (this.debug > 1) console.log('---->>> translist = ', list);
+    this.bugLogN(1, '---->>> translist = ', list);
     this.root._transList = list;
+    this.transSubject.next(new Set(list));
   }
 
   /**
    * token is an arbitrary object that is referentially unique. An object, Symbol. Not a scalar (string/number).
-   * The significant trait of token is that when you popTrans (remove it from the trans collection, it (AND ONLY IT)
-   * are removed.
-   *
-   * Note -- all transactions are managed in the root leaf.
-   * This means any transactional activity blocks all leaf activity
-   * until the root transaction collection is cleared.
+   * The significant trait of token is that when you popTrans (remove it from the trans collection,
+   * it (AND ONLY IT) are removed.
    *
    * @param token
    */
   pushTrans(token: any) {
-    if (this.debug > 2)
-      console.log('PushTrans: ', token, 'into', this.transList);
+    this.bugLogN(2, 'PushTrans: ', token, 'into', this.transList);
     this.transList = [...this.transList, token];
     return token;
   }
 
   /**
-   * clear the trans from the root collection
+   * remove a trans from the root collection
    * @param token
    */
   popTrans(token: any) {
-    if (this.debug > 2)
-      console.log('popTrans: ', token, 'from', this.transList);
+    this.bugLogN(2, 'popTrans: ', token, 'from', this.transList);
     this.transList = this.transList.filter(t => t !== token);
     return token;
   }
@@ -500,6 +530,21 @@ export default class Leaf {
     return !!this.transList.length;
   }
 
+  /**
+   * executes a function in a "transient state", popping and pushing a token into
+   * the transList; this has a side effect of changing the transSubjects' state as well,
+   * which will block some actions including updating the broadcast subject.
+   *
+   * Transactions may be nested, populating the list with multiple tokens.
+   * The only thing that matters is that until the last token clears,
+   * the tree is considered to be "in transaction."
+   *
+   * - The function that is passed into transact must be synchronous.
+   * - If the function does not throw, its value is returned from transact.
+   * - Throwing functions still remove the token from the transList before throwing.
+   *
+   * @param fn
+   */
   transact(fn) {
     const startVersion = this.version;
     const token = this.pushTrans(
@@ -541,6 +586,11 @@ export default class Leaf {
     return !this.parent;
   }
 
+  /**
+   * returns the latest snapshot tuple whose version <= version.
+   * @param version
+   * @returns {{vetsion: number, value: any} | null}
+   */
   _getSnap(version: number): { version: number; value: any } | null {
     if (this._history) {
       if (this._history.has(version)) {
@@ -549,19 +599,19 @@ export default class Leaf {
           value: this._history.get(version),
         };
       }
-      // return the highest snapshot that is not greater than version
-      let snap = null;
-      let snapVersion: number | null = null;
+
+      let foundValue = null;
+      let foundVersion: number | null = null;
       this._history.forEach((value, hVersion) => {
         if (hVersion > version) return;
         // @ts-ignore
-        if (snapVersion === null || snapVersion < hVersion) {
-          snapVersion = hVersion;
-          snap = value;
+        if (foundVersion === null || foundVersion < hVersion) {
+          foundVersion = hVersion;
+          foundValue = value;
         }
       });
-      if (snapVersion === null) return null;
-      return { version: snapVersion, value: snap };
+      if (foundVersion === null) return null;
+      return { version: foundVersion, value: foundValue };
     }
     if (this.version <= version) {
       return {
@@ -572,6 +622,10 @@ export default class Leaf {
     return null;
   }
 
+  /**
+   * remove history entries older than a given number
+   * @param version
+   */
   _purgeHistoryAfter(version: number) {
     if (this._history) {
       const keys = Array.from(this._history.keys());
@@ -583,18 +637,19 @@ export default class Leaf {
     }
   }
 
-  rollbackTo(version, rollingForward = false) {
+  /**
+   * resets all branches by resetting their value to the first one
+   * whose version is <= the target.
+   *
+   * @param version {number}
+   * @param rollingForward {boolean}
+   */
+  rollbackTo(version: number, rollingForward = false) {
     if (!rollingForward) {
-      if (this.debug)
-        console.log(
-          '< < < < < < rolling back ',
-          version,
-          this.root.toJSON(true)
-        );
+      this.bugLogJ('< < < < < < rolling back ', version);
       this.root.rollbackTo(version, true);
-      if (this.debug) {
-        console.log('< < < < < < post rolling back: ', this.root.toJSON(true));
-      }
+      this.bugLog('< < < < < < post rolling back: ');
+
       return;
     }
 
