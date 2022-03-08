@@ -17,7 +17,14 @@ import {
   isObj,
   isFn,
 } from './utils';
-import { ABSENT, CHANGE_DOWN } from './constants';
+import {
+  ABSENT,
+  CHANGE_DOWN,
+  CHANGE_UP,
+  TYPE_ARRAY,
+  TYPE_MAP,
+  TYPE_OBJECT,
+} from './constants';
 
 const NO_VALUE = Symbol('no value');
 
@@ -184,12 +191,12 @@ export default class Leaf {
   }
 
   /*  
-          the highest version that has ever been used;
-          should be true for the entire tree,
-          as changes to any branch version cascade to the parent,
-          as do get attempts.
-          highestVersion does not decline in rollback.
-          */
+    the highest version that has ever been used;
+    should be true for the entire tree,
+    as changes to any branch version cascade to the parent,
+    as do get attempts.
+    highestVersion does not decline in rollback.
+    */
   private _highestVersion = 0;
   get highestVersion(): number {
     if (this.parent) return this.parent.highestVersion;
@@ -311,21 +318,24 @@ export default class Leaf {
    * - broadcast to any subscribers
    *
    * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
-   * 2. creates a rootChange
-   * 3. _changeValue: inside a transaction (traps any thrown error into rootChange)
-   *    a. emit('change', rootChange) -- triggers any tests
-   *    b. _changeUp(value) -- update changed fields to branches
-   *    c. _changeDown()
+   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange)
+   *    a. set the value passed in; merges any structures(objects/maps) from previous values.
+   *    b. creates a rootChange
+   *       emit('change', rootChange) -- triggers any tests which may throw
+   *    c. _changeUp(value) -- update changed fields to branches,
+   *       recursively changeUp for any subProps
+   *    d. _changeDown()
    *        i. _changeFromBranch(this);
    *        ii. inject this updated value into its parent
-   *        iii. parent.next(updated, CHANGE_DOWN) prevents recursive changeUp in b)
-   *    d. if (rootChange has no error)
-   *        i. rootChange.complete
-   *        ii. broadcasts 'change-complete' (change) to subject
-   * 4. (if no throws let us get this far) if not in a transaction
-   *    for each changed value in the tree:
-   *    a. sets the version to (highestVersion + 1
-   *    b. snapshots value/version
+   *        iii. parent.next(updated, CHANGE_DOWN) prevents recursive _changeDown
+   * 4  if not in a transaction (outermost next)
+   *    a. advance() journals all dirty leafs. for each changed value in the tree:
+   *       i. sets the version to (highestVersion + 1
+   *       ii.. snapshots value/version
+   *    b. broadcast() 'change-complete' (change) to subject
+   * (on any thrown error)
+   *    transact()'s wrapper will rollback all in-process value changes
+   *    to their previous state from the history journal.
    */
 
   /**
@@ -336,7 +346,7 @@ export default class Leaf {
    * this method will return an empty Map.
    * @param value
    */
-  _getBranchChanges(value): Map<any, any> {
+  _getBranchChanges(value): Map<Leaf, any> {
     const branchChanges = new Map();
 
     if (this._branches) {
@@ -353,6 +363,10 @@ export default class Leaf {
     return branchChanges;
   }
 
+  /**
+   * insures that the value is the same type as the leaf's current value
+   * @param value
+   */
   _checkType(value) {
     const valueType = typeOfValue(value);
     if (valueType !== this.type) {
@@ -364,10 +378,15 @@ export default class Leaf {
     }
   }
 
+  /**
+   * breaks any fields that affect sub-branches
+   * and updates them
+   * @param value
+   */
   _changeUp(value) {
     const branchMap = this._getBranchChanges(value);
-    branchMap.forEach((newValue, subBranch) => {
-      subBranch._changeValue(newValue); // can throw;
+    branchMap.forEach((newValue, branch) => {
+      branch._changeValue(newValue, CHANGE_UP); // can throw;
     });
   }
 
@@ -380,26 +399,37 @@ export default class Leaf {
   }
 
   _changeDown() {
-    if (!this.parent) return;
-    this.parent._changeFromBranch(this);
+    if (this.parent) {
+      this.parent._changeFromBranch(this);
+    }
   }
 
   _changeValue(value, direction = ABSENT) {
     this.transact(() => {
-      const updatedValue = this._initialized
+      const updatedValue = !this._initialized
         ? value
         : makeValue(value, this.value);
+      this.bugLog(
+        '--- >>> setting value from ',
+        this.value,
+        ' to ',
+        updatedValue,
+        'from ',
+        value
+      );
       this.value = updatedValue;
       // a map of branch: newValue key pairs.
       // the entire branch is saved as a key for convenience
-      const rootChange = new Change(updatedValue, this);
+      const rootChange = new Change(value, this);
       try {
         rootChange.target.e.emit('change', rootChange);
         if (rootChange.error) throw rootChange.error;
         if (direction !== CHANGE_DOWN) {
-          this._changeUp(updatedValue);
+          this._changeUp(value);
         }
-        this._changeDown();
+        if (direction !== CHANGE_UP) {
+          this._changeDown();
+        }
       } catch (err) {
         if (!rootChange.isStopped) {
           rootChange.error = err;
@@ -430,7 +460,8 @@ export default class Leaf {
         `done with set value: ${value} of ${this.name}not in trans - advancing`
       );
 
-      if (this.root.advance(this.highestVersion + 1)) this.broadcast();
+      this.root.advance(this.highestVersion + 1);
+      this.broadcast();
       this.bugLog('--- post advance: ', true);
     } else {
       this.bugLog('---------- done with next; still in transaction');
@@ -459,7 +490,7 @@ export default class Leaf {
     return newDirty;
   }
 
-  /* -------------------- trnasactions ------------------- */
+  /* -------------------- transactions ------------------- */
 
   /*
     transactions are global and managed from the root of the tree.
@@ -546,7 +577,7 @@ export default class Leaf {
    * @param fn
    */
   transact(fn) {
-    const startVersion = this.version;
+    const startVersion = this.root.highestVersion;
     const token = this.pushTrans(
       Symbol(`leaf ${this.name}, version ${startVersion}`)
     );
@@ -682,8 +713,8 @@ export default class Leaf {
 
   /* ------------------- Actions --------------------- */
 
-  private _$do;
-  get $do(): {} {
+  private _$do: any;
+  get $do(): any {
     if (!this._$do) {
       this._$do = {};
       this.inferActions();
@@ -692,7 +723,9 @@ export default class Leaf {
   }
 
   inferActions() {
-    keys(this.value).forEach(key => {
+    const valKeys = keys(this.value);
+
+    valKeys.forEach(key => {
       this.addAction(`set${ucFirst(key)}`, (leaf, value) => {
         return leaf.set(key, value);
       });
@@ -702,10 +735,45 @@ export default class Leaf {
   addAction(name: string, fn): boolean {
     try {
       this.$do[name] = (...args) => this.transact(() => fn(this, ...args));
+      this.bugLog('$do sdvanced to ', this.$do, 'from', name);
       return true;
     } catch (err) {
       console.warn('cannot addAction', name, fn);
       return false;
     }
+  }
+
+  set(name, value: any) {
+    if (this._branches && this._branches.has(name)) {
+      this.branch(name).next(value);
+    } else {
+      switch (this.type) {
+        case TYPE_OBJECT:
+          this.next({ [name]: value });
+          break;
+
+        case TYPE_MAP:
+          this.next(new Map([[name, value]]));
+          break;
+
+        case TYPE_ARRAY:
+          const next = [...this.value];
+          if (typeof name === 'number') {
+            if (Array.isArray(value)) {
+              next.splice(name, value.length, ...value);
+            } else {
+              next[name] = value;
+            }
+            this.next(next);
+          } else {
+            console.warn('set (array) with non-numeric index');
+          }
+          break;
+
+        default:
+          console.warn('set attempted on subject of type', this.type);
+      }
+    }
+    return this;
   }
 }

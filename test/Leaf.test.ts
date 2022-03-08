@@ -276,6 +276,56 @@ describe('Leaf', () => {
         );
         expect(point.version).toBe(2);
       });
+
+      it('should push changes to branches', () => {
+        const point = new Leaf(new Map(), {
+          branches: {
+            x: 0,
+            y: 0,
+            z: 0,
+          },
+        });
+
+        expect(point.branch('x').version).toBe(0);
+        point.next(
+          new Map([
+            ['x', 1],
+            ['y', 4],
+            ['z', 9],
+          ])
+        );
+
+        expect(point.value).toEqual(
+          new Map([
+            ['x', 1],
+            ['y', 4],
+            ['z', 9],
+          ])
+        );
+        expect(point.version).toBe(1);
+
+        expect(point.branch('x').value).toBe(1);
+        expect(point.branch('x').version).toBe(1);
+
+        expect(point.branch('y').value).toBe(4);
+        expect(point.branch('y').version).toBe(1);
+
+        expect(point.branch('z').value).toBe(9);
+        expect(point.branch('z').version).toBe(1);
+      });
+    });
+  });
+
+  describe('actions', () => {
+    it('should make setters for initial props', () => {
+      const point = new Leaf({ x: 0, y: 0, z: 0 }, {  });
+      point.$do.setX(3);
+
+      expect(point.value).toEqual({ x: 3, y: 0, z: 0 });
+
+      point.$do.setY(4);
+
+      expect(point.value).toEqual({ x: 3, y: 4, z: 0 });
     });
   });
 });
