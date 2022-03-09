@@ -353,4 +353,90 @@ describe('Leaf', () => {
       expect(Math.round(point.$do.length())).toEqual(7);
     });
   });
+
+  describe('subscribe', () => {
+    describe('scalar', () => {
+      it('should echo basic values', () => {
+        const history: number[] = [];
+
+        const num = new Leaf(0);
+
+        num.subscribe(value => history.push(value));
+
+        expect(history).toEqual([0]);
+
+        num.next(1);
+
+        expect(history).toEqual([0, 1]);
+
+        num.next(2);
+
+        expect(history).toEqual([0, 1, 2]);
+      });
+    });
+
+    describe('object', () => {
+      it('should express one change per next or action', () => {
+        const history: any[] = [];
+
+        const line = new Leaf(
+          {},
+          {
+            branches: {
+              start: { x: 0, y: 0 },
+              end: { x: 1, y: 1 },
+            },
+            actions: {
+              offset(line, x, y) {
+                line.branch('start').$do.setX(line.value.start.x + x);
+                line.branch('start').$do.setY(line.value.start.y + y);
+
+                line.branch('end').$do.setX(line.value.end.x + x);
+                line.branch('end').$do.setY(line.value.end.y + y);
+              },
+            },
+          }
+        );
+
+        line.subscribe(value => history.push(value));
+
+        expect(history).toEqual([
+          {
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 1 },
+          },
+        ]);
+
+        line.next({ start: { x: -1, y: -2 } });
+
+        expect(history).toEqual([
+          {
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 1 },
+          },
+          {
+            start: { x: -1, y: -2 },
+            end: { x: 1, y: 1 },
+          },
+        ]);
+
+        line.$do.offset(3, 3);
+
+        expect(history).toEqual([
+          {
+            start: { x: 0, y: 0 },
+            end: { x: 1, y: 1 },
+          },
+          {
+            start: { x: -1, y: -2 },
+            end: { x: 1, y: 1 },
+          },
+          {
+            start: { x: 2, y: 1 },
+            end: { x: 4, y: 4 },
+          },
+        ]);
+      });
+    });
+  });
 });

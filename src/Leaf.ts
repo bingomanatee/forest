@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/camelcase,@typescript-eslint/no-this-alias */
 import EventEmitter from 'emitix';
-import { BehaviorSubject, Subject, SubjectLike } from 'rxjs';
+import { BehaviorSubject, SubjectLike } from 'rxjs';
 import { Change } from './Change';
 import {
   getKey,
@@ -33,7 +33,6 @@ export default class Leaf {
     this._e = new EventEmitter();
     this.value = value;
     this._history = new Map();
-    this._subject = new Subject();
     this._transList = [];
     this.config(opts);
 
@@ -43,6 +42,17 @@ export default class Leaf {
     if (!this.root._initialized) {
       this._flushJournal();
     }
+
+    switch (this.type) {
+      case TYPE_OBJECT:
+        this.inferActions();
+        break;
+
+      case TYPE_MAP:
+        this.inferActions();
+        break;
+    }
+
     this._initialized = true;
   }
 
@@ -212,6 +222,21 @@ export default class Leaf {
     }
   }
 
+  get maxVersion() {
+    return this.root._maxVersion();
+  }
+
+  _maxVersion() {
+    let version = this.version;
+    if (this._branches) {
+      this.branches.forEach(branch => {
+        version = Math.max(version, branch._maxVersion());
+      });
+    }
+
+    return version;
+  }
+
   // the current version of this leaf. A leaf can have children with lower version numbers than it,
   // but a leaf should never have children with higher versions than it.
   private _version = 0;
@@ -313,29 +338,33 @@ export default class Leaf {
    * - the short version is:
    * - update values up and down the tree,
    *     flagging changes as dirty and validating as we go
+   *
+   * next() is transactional wrapped, so in the absence of errors it will:
    * - advance the version of dirty values
    * - journal the changes
    * - broadcast to any subscribers
    *
+   * the long version: next
    * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
-   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange)
-   *    a. set the value passed in; merges any structures(objects/maps) from previous values.
-   *    b. creates a rootChange
+   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange) which executes the following:
+   *    (in a transaction)
+   * 3. set the value passed in; merges any structures(objects/maps) from previous values.
+   * 4. creates a rootChange
    *       emit('change', rootChange) -- triggers any tests which may throw
-   *    c. _changeUp(value) -- update changed fields to branches,
+   * 5. _changeUp(value) -- update changed fields to branches,
    *       recursively changeUp for any subProps
-   *    d. _changeDown()
+   * 6. _changeDown()
    *        i. _changeFromBranch(this);
    *        ii. inject this updated value into its parent
    *        iii. parent.next(updated, CHANGE_DOWN) prevents recursive _changeDown
-   * 4  if not in a transaction (outermost next)
-   *    a. advance() journals all dirty leafs. for each changed value in the tree:
-   *       i. sets the version to (highestVersion + 1
-   *       ii.. snapshots value/version
-   *    b. broadcast() 'change-complete' (change) to subject
-   * (on any thrown error)
-   *    transact()'s wrapper will rollback all in-process value changes
-   *    to their previous state from the history journal.
+   *
+   * If there are any errors all changes after the beginning of next() are rolled back.
+   *
+   * otherwise, at the close of any outermost transactions where changes were made:
+   *
+   * 7. advance the version of dirty values
+   * 8. journal the changes
+   * 9. broadcast to any subscribers
    */
 
   /**
@@ -446,6 +475,13 @@ export default class Leaf {
    * @param direction
    */
   next(value: any, direction: symbol = ABSENT) {
+    if (this.isStopped) {
+      throw e('cannot next() a stopped Leaf', {
+        value,
+        target: this,
+      });
+    }
+
     if (!this.root._initialized) {
       this.value = value;
       return;
@@ -455,23 +491,13 @@ export default class Leaf {
     this._checkType(value);
 
     this._changeValue(value, direction);
-    if (!this.inTransaction) {
-      this.bugLogJ(
-        `done with set value: ${value} of ${this.name}not in trans - advancing`
-      );
-
-      this.root.advance(this.highestVersion + 1);
-      this.broadcast();
-      this.bugLog('--- post advance: ', true);
-    } else {
-      this.bugLog('---------- done with next; still in transaction');
-    }
   }
 
   /**
    * snapshots all "dirty" branches with the passed-in version and updates the
    * version of the branch.
    * @param version
+   * @return {boolean} whether leaf or any of the branches have been changed;
    */
   advance(version): boolean {
     let newDirty = false;
@@ -574,28 +600,54 @@ export default class Leaf {
    * - If the function does not throw, its value is returned from transact.
    * - Throwing functions still remove the token from the transList before throwing.
    *
+   * all actions, and next() changes, are transact() wrapped, so only one difference
+   * is broadcast for every outermost transaction.
    * @param fn
    */
   transact(fn) {
-    const startVersion = this.root.highestVersion;
+    const startMax = this.maxVersion;
+    const startHighest = this.highestVersion;
     const token = this.pushTrans(
-      Symbol(`leaf ${this.name}, version ${startVersion}`)
+      Symbol(`leaf ${this.name}, version ${startMax}`)
     );
     let out;
     try {
       out = fn();
     } catch (err) {
       this.popTrans(token);
-      this.rollbackTo(startVersion);
+      this.rollbackTo(startMax);
       throw e(err, { leaf: this });
     }
     this.popTrans(token);
+    if (!this.inTransaction) {
+      this.bugLogJ(
+        `done with set value: ${this.value} of ${this.name}not in trans - advancing`
+      );
+
+      const hasDirty = this.root.advance(this.highestVersion + 1);
+      if (
+        hasDirty ||
+        this.maxVersion !== startMax ||
+        this.highestVersion !== startHighest
+      ) {
+        this.broadcast();
+      }
+      this.bugLog('--- post advance: ', true);
+    } else {
+      this.bugLog('---------- done with next; still in transaction');
+    }
     return out;
   }
 
-  private _subject: SubjectLike<any>;
+  private _subject: SubjectLike<any> | null = null;
 
   subscribe(listener: any) {
+    if (!this._subject) {
+      this._subject = new BehaviorSubject(this.value);
+      if (this.isStopped) {
+        this._subject.complete();
+      }
+    }
     return this._subject.subscribe(listener);
   }
 
@@ -774,6 +826,17 @@ export default class Leaf {
           console.warn('set attempted on subject of type', this.type);
       }
     }
-    return this;
+    return value;
+  }
+
+  public _isStopped = false;
+  get isStopped() {
+    return this._isStopped;
+  }
+  complete() {
+    if (this._subject) {
+      this._subject.complete();
+    }
+    this._isStopped = true;
   }
 }
