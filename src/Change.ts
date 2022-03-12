@@ -1,14 +1,18 @@
+import { ABSENT } from './constants';
+
 export class Change {
-  constructor(value: any, target: any) {
+  constructor(value: any, target: any, next: any = ABSENT) {
     this.value = value;
+    this.next = next === ABSENT ? value : next;
     this.versionBeforeChange = target.version;
     this.target = target;
     this._error = null;
     this.status = 'live';
   }
 
+  public next: any; // the target's previous value blended with value - or value
   public target: any;
-  public value: any;
+  public value: any; // the change definition - a partial or total replacement for the target's vlaue
   private _error: any;
   public status: string;
   public versionBeforeChange: number;

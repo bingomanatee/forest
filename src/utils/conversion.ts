@@ -2,12 +2,12 @@ import {
   isMap,
   isObj,
   isStr,
-  isNumber,
+  isNum,
   e,
-  typeOfValue,
+  detectForm,
   isThere,
 } from './tests';
-import { TYPE_ARRAY, TYPE_MAP, TYPE_OBJECT } from '../constants';
+import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
 
 export function toMap(m: any, force = false) {
   if (m instanceof Map) {
@@ -40,7 +40,7 @@ export function toObj(m: any, force = false) {
   } else if (isMap(m)) {
     out = {};
     m.forEach((val: any, key: any) => {
-      if (!(isNumber(val) || isStr(val, true))) {
+      if (!(isNum(val) || isStr(val, true))) {
         return;
       }
       try {
@@ -69,8 +69,8 @@ export function toObj(m: any, force = false) {
  * @param base any
  */
 export function makeValue(update, base) {
-  const baseType = typeOfValue(base);
-  const updateType = typeOfValue(update);
+  const baseType = detectForm(base);
+  const updateType = detectForm(update);
 
   if (baseType !== updateType) {
     const err = e('makeValue Type Mismatch', {
@@ -87,18 +87,18 @@ export function makeValue(update, base) {
 
   let out = update;
   switch (baseType) {
-    case TYPE_MAP:
+    case FORM_MAP:
       out = new Map(base);
       update.forEach((val, key) => {
         out.set(key, val);
       });
       break;
 
-    case TYPE_OBJECT:
+    case FORM_OBJECT:
       out = { ...base, ...update };
       break;
 
-    case TYPE_ARRAY:
+    case FORM_ARRAY:
       out = [...base];
       update.forEach((val, key) => {
         if (isThere(val)) {

@@ -7,7 +7,7 @@ import {
   setKey,
   toMap,
   clone,
-  typeOfValue,
+  detectForm,
   isThere,
   hasKey,
   makeValue,
@@ -16,14 +16,18 @@ import {
   ucFirst,
   isObj,
   isFn,
+  testForType,
+  detectType,
+  isCompound,
 } from './utils';
 import {
   ABSENT,
   CHANGE_DOWN,
   CHANGE_UP,
-  TYPE_ARRAY,
-  TYPE_MAP,
-  TYPE_OBJECT,
+  FORM_ARRAY,
+  FORM_MAP,
+  FORM_OBJECT,
+  TYPE_ANY,
 } from './constants';
 
 const NO_VALUE = Symbol('no value');
@@ -43,12 +47,12 @@ export default class Leaf {
       this._flushJournal();
     }
 
-    switch (this.type) {
-      case TYPE_OBJECT:
+    switch (this.form) {
+      case FORM_OBJECT:
         this.inferActions();
         break;
 
-      case TYPE_MAP:
+      case FORM_MAP:
         this.inferActions();
         break;
     }
@@ -80,16 +84,32 @@ export default class Leaf {
   }
 
   config(opts: any = {}) {
-    const { parent = null, branches = null, test, name, actions, debug } = opts;
+    const {
+      parent = null,
+      branches = null,
+      test,
+      name,
+      actions,
+      debug,
+      type,
+      any,
+    } = opts;
+    this.debug = debug;
     this._parent = parent;
 
-    this.debug = debug;
     this.name = name;
     if (!this.name && !this.parent) {
       this.name = '[ROOT]';
     }
 
     if (branches) this.addBranches(branches);
+    if (any) {
+      this.type = TYPE_ANY;
+    } else if (type) {
+      this.type = type === true ? detectType(this.value) : type;
+      this.bugLogN(2, 'type is ', type, 'this.type set to ', this.type);
+      this.addTest(testForType);
+    }
     if (typeof test === 'function') this.addTest(test);
 
     if (isObj(actions)) {
@@ -258,7 +278,8 @@ export default class Leaf {
     return this;
   }
 
-  type: symbol = ABSENT;
+  type?: symbol | string;
+  form?: symbol | string = ABSENT;
   private _value: any = ABSENT;
   public _dirty = false;
 
@@ -266,18 +287,17 @@ export default class Leaf {
     return this._value;
   }
 
+  /**
+   * updates the value of this form. There may be a brief inconsistency as
+   * the values of the update are sent out to the branches which can reinterpret them.
+   * @param value
+   */
   set value(value: any) {
-    const valueType = typeOfValue(value);
+    const form = detectForm(value);
     if (this._value === value) return;
-    if (!isThere(this.type)) {
-      this.type = valueType;
-    } else if (this._initialized && valueType !== this.type) {
-      throw e(`cannot change type of ${this.name} once it has been set`, {
-        target: this,
-        currentType: this.type,
-        value: value,
-        valueType,
-      });
+    if (!isThere(this.form)) {
+      // initialize form to first time value is set.
+      this.form = form;
     }
     this._value = value;
     if (this._initialized) this._dirty = true;
@@ -311,12 +331,15 @@ export default class Leaf {
       return out;
     }
 
-    const out = {
+    const out: any = {
       name: this.name,
       value: this.value,
       version: this.version,
       history: this.historyString,
     };
+    if (this.type) {
+      out.type = this.type.toString();
+    }
     if (this._dirty) {
       // @ts-ignore
       out.dirty = true;
@@ -381,8 +404,8 @@ export default class Leaf {
     if (this._branches) {
       this.branches.forEach((branch, name) => {
         //@TODO: type test now?
-        if (hasKey(value, name, this.type)) {
-          const newValue = getKey(value, name, this.type);
+        if (hasKey(value, name, this.form)) {
+          const newValue = getKey(value, name, this.form);
           if (newValue !== branch.value) {
             branchChanges.set(branch, newValue);
           }
@@ -396,12 +419,13 @@ export default class Leaf {
    * insures that the value is the same type as the leaf's current value
    * @param value
    */
-  _checkType(value) {
-    const valueType = typeOfValue(value);
-    if (valueType !== this.type) {
-      throw e(`incorrect value for leaf ${this.name || ''}`, {
+  _checkForm(value) {
+    if (this.type === TYPE_ANY || this.form === TYPE_ANY) return;
+    const valueType = detectForm(value);
+    if (valueType !== this.form) {
+      throw e(`incorrect form for leaf ${this.name || ''}`, {
         valueType,
-        branchType: this.type,
+        branchType: this.form,
         nextValue: value,
       });
     }
@@ -422,7 +446,7 @@ export default class Leaf {
   _changeFromBranch(branch) {
     if (branch.name && this.branch(branch.name) === branch) {
       const value = clone(this.value);
-      setKey(value, branch.name, branch.value, this.type);
+      setKey(value, branch.name, branch.value, this.form);
       this.next(value, CHANGE_DOWN);
     }
   }
@@ -435,9 +459,15 @@ export default class Leaf {
 
   _changeValue(value, direction = ABSENT) {
     this.transact(() => {
-      const updatedValue = !this._initialized
-        ? value
-        : makeValue(value, this.value);
+      let updatedValue = value;
+
+      if (this._initialized && isCompound(this.form)) {
+        try {
+          updatedValue = makeValue(value, this.value);
+        } catch (err) {
+          updatedValue = value;
+        }
+      }
       this.bugLog(
         '--- >>> setting value from ',
         this.value,
@@ -449,7 +479,7 @@ export default class Leaf {
       this.value = updatedValue;
       // a map of branch: newValue key pairs.
       // the entire branch is saved as a key for convenience
-      const rootChange = new Change(value, this);
+      const rootChange = new Change(value, this, updatedValue);
       try {
         rootChange.target.e.emit('change', rootChange);
         if (rootChange.error) throw rootChange.error;
@@ -488,7 +518,10 @@ export default class Leaf {
     }
     this.bugLog('setting ', this.name, 'to', value, direction);
 
-    this._checkType(value);
+    if (!this.type) {
+      // if type is present, skip checkForm - there is a test for type in tests
+      this._checkForm(value);
+    }
 
     this._changeValue(value, direction);
   }
@@ -799,16 +832,16 @@ export default class Leaf {
     if (this._branches && this._branches.has(name)) {
       this.branch(name).next(value);
     } else {
-      switch (this.type) {
-        case TYPE_OBJECT:
+      switch (this.form) {
+        case FORM_OBJECT:
           this.next({ [name]: value });
           break;
 
-        case TYPE_MAP:
+        case FORM_MAP:
           this.next(new Map([[name, value]]));
           break;
 
-        case TYPE_ARRAY:
+        case FORM_ARRAY:
           const next = [...this.value];
           if (typeof name === 'number') {
             if (Array.isArray(value)) {
@@ -823,7 +856,7 @@ export default class Leaf {
           break;
 
         default:
-          console.warn('set attempted on subject of type', this.type);
+          console.warn('set attempted on subject of type', this.form);
       }
     }
     return value;

@@ -1,27 +1,27 @@
-import { TYPE_ARRAY, TYPE_MAP, TYPE_OBJECT, TYPE_VALUE } from '../constants';
-import { isThere, typeOfValue } from './tests';
+import { FORM_ARRAY, FORM_MAP, FORM_OBJECT, FORM_VALUE } from '../constants';
+import { isThere, detectForm } from './tests';
 
-export function getKey(value: any, key: any, vType: symbol | null = null): any {
+export function getKey(value: any, key: any, vType: any = null): any {
   if (!vType) {
-    return getKey(value, key, typeOfValue(value));
+    return getKey(value, key, detectForm(value));
   }
 
   let childValue = null;
 
   switch (vType) {
-    case TYPE_VALUE:
+    case FORM_VALUE:
       childValue = null;
       break;
 
-    case TYPE_OBJECT:
+    case FORM_OBJECT:
       childValue = value[key];
       break;
 
-    case TYPE_MAP:
+    case FORM_MAP:
       childValue = value.get(key);
       break;
 
-    case TYPE_ARRAY:
+    case FORM_ARRAY:
       childValue = value[key];
       break;
 
@@ -36,22 +36,22 @@ export function setKey(
   value: any,
   key: any,
   childValue: any,
-  vType: symbol | null = null
+  vType: any = null
 ): any {
   if (!vType) {
-    return setKey(value, key, childValue, typeOfValue(value));
+    return setKey(value, key, childValue, detectForm(value));
   }
 
   switch (vType) {
-    case TYPE_OBJECT:
+    case FORM_OBJECT:
       value[key] = childValue;
       break;
 
-    case TYPE_MAP:
+    case FORM_MAP:
       value.set(key, childValue);
       break;
 
-    case TYPE_ARRAY:
+    case FORM_ARRAY:
       value[key] = childValue;
       break;
 
@@ -68,15 +68,15 @@ export function keys(obj, stringify = false) {
   if (!isThere(obj)) {
     return [];
   }
-  let out = [];
-  switch (typeOfValue(obj)) {
-    case TYPE_MAP:
+  let out: any = [];
+  switch (detectForm(obj)) {
+    case FORM_MAP:
       out = Array.from(obj.keys());
-      return;
+      break;
 
-    case TYPE_OBJECT:
-      return Array.from(Object.keys(obj));
-      return;
+    case FORM_OBJECT:
+      out = Array.from(Object.keys(obj));
+      break;
   }
   return out;
 }

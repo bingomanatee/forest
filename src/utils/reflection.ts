@@ -4,7 +4,7 @@ export const setInstance = inst => {
   Leaf = inst;
 };
 
-export const isMirror = (target): boolean =>
+export const isLeaf = (target): boolean =>
   !!(Leaf && target instanceof Leaf);
 export const create = (...args) =>
   // @ts-ignore
