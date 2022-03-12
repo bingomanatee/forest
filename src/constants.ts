@@ -14,3 +14,6 @@ export const NAME_UNNAMED = Symbol('unnamed');
 export const ABSENT = Symbol('ABSENT');
 export const CHANGE_DOWN = Symbol('CHANGE_DOWN');
 export const CHANGE_UP = Symbol('CHANGE_UP');
+export const CHANGE_ABSOLUTE = Symbol('CHANGE_ABSOLUTE');
+
+export type TypeType = symbol | string | null;

@@ -53,7 +53,7 @@ Leaf can branch multiple times; as long as a branch is of type object/Map/array,
 Leaf actions allow you to achieve more complex change patterns. They are functions, and can return values. 
 Leaf actions are accessed off a `.$do` collection.
 
-### Implicit (inferred) setter actions
+### Implicit (inferred) setters
 
 Map and object types will have a set[field] function for every key/property in the initial value, and every branch.
 
@@ -104,6 +104,114 @@ console.log('length', leaf.$do.length());
 
 In the above example, addTo triggers three other sub-changes with three "set" actions -- 
 however because all actions (i.e., addTo) are transactionally contained, only one change is emitted. 
+If you trigger a promise inside an action its advised that the response and error be 
+captured in actions for maximum safety. 
+
+Its also advised not to use async notation; if you do, 
+NONE of the functions' body will be transactionally locked. 
+
+```javascript
+
+const user = new Leaf(
+  {
+    id: 0,
+    name: '', 
+    status: 'new',
+    err: null
+  },
+  {
+    actions: {
+      save(leaf) {
+        if (leaf.value.status !== 'new') return;
+        leaf.$do.setStatus('saving');
+        axios.put('/api/user/', ({
+          name: this.name
+        }))
+                .then(leaf.$do.onSave)
+                .catch(leaf.$do.onErr);
+      },
+      onSave(leaf, {data}) {
+        leaf.$do.setId(data.id);
+        leaf.$do.setStatus('saved');
+      },
+      onErr(leaf, err) {
+        leaf.$do.setError(err.message);
+        leaf.$do.setStatus('error');
+      }
+    }
+  }
+);
+
+leaf.subscribe((val) => console.log(val));
+leaf.$do.setName('Bob');
+leaf.$do.save();
+console.log('after save');
+
+/**
+ * {id: 0, name: '', status: 'new', err: null}
+ * {id: 0, name: 'Bob', status: 'new', err: null}
+ * {id: 0, name: 'Bob', status: 'saving', err: null}
+ * 'after save'
+ * {id: 1000, name: 'Bob', status: 'saved', err: null}
+ */
+```
+
+### Async actions
+
+Actions are designed to be synchronous; any errors that happen asynchronously are
+
+
+## value
+
+THe value of a Leaf can be anything; however, in order not to make branching "wierd", the *form* 
+of a leaf should not change(see below for details); you don't usually want to replace an object with an array,
+though there are ways that can be done. (see "any" below);
+
+Values are expansive, like React (classic) state; you can add properties on the fly via "next" to objects,
+or keys to Map instances, or expand the lengths of arrays. 
+
+Setter actions are inferred from the keys of Maps/objects on creation. If you add keys, call `myLeaf.inferActions()`
+to add setters for any new keys.
+
+```javascript
+
+let leaf = new Leaf({x: 1, y: 2});
+leaf.subscribe((val) => console.log(val));
+
+leaf.next({x: 3, z: 4});
+leaf.inferActions();
+leaf.$do.setZ(5);
+/**
+ * {x: 1, y: 2}
+ * {x: 3, y: 2, z: 4}
+ * {x: 3, y: 2, z: 5}
+ * 
+ */
+
+```
+
+if you want to delete keys from the value call `myLeaf.deleteKeys('x', 'y')`. Any matching branches will be completed
+and deleted. 
+
+```javascript
+
+  const pt = new Leaf({
+      x: 0,
+      y: 0,
+      z: 0,
+    });
+
+    pt.subscribe(value => console.log(value));
+
+    pt.delKeys('y');
+
+      // { x: 0, y: 0, z: 0 },
+      // { x: 0, z: 0 },
+    
+    pt.$do.setY();
+    // throws 
+
+```
 
 ## `subscribe(listener)`
 
@@ -162,7 +270,7 @@ against this happening, but can be broken if you try real hard (or set any = tru
 
 Clearly, not changing container types is in your best interest. 
 
-## options
+## Options
 
 The second property of Leaf can be an object with any/all/none of these properties:
 

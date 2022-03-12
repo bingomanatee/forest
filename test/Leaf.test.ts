@@ -1,5 +1,6 @@
 import { Leaf } from '../src';
 import { TYPE_DATE, TYPE_NUMBER } from '../src/constants';
+import { toMap } from '../src/utils';
 
 // import { inspect } from 'util';
 
@@ -31,6 +32,52 @@ describe('Leaf', () => {
     });
   });
 
+  describe('containers', () => {
+    it('should expand objects', () => {
+      const pt = new Leaf({ x: 0, y: 0 });
+      pt.next({ x: 1, z: 3 });
+      expect(pt.value).toEqual({ x: 1, y: 0, z: 3 });
+    });
+
+    it('should expand maps', () => {
+      const pt = new Leaf(toMap({ x: 0, y: 0 }));
+      pt.next(
+        new Map([
+          ['x', 1],
+          ['z', 3],
+        ])
+      );
+      expect(pt.value).toEqual(
+        new Map([
+          ['x', 1],
+          ['y', 0],
+          ['z', 3],
+        ])
+      );
+    });
+
+    describe('#delKeys', () => {
+      it('should delete object keys', () => {
+        const pt = new Leaf({
+          x: 0,
+          y: 0,
+          z: 0,
+        });
+        const history: any[] = [];
+
+        pt.subscribe(value => history.push(value));
+
+        pt.delKeys('y');
+        expect(pt.value).toEqual({ x: 0, z: 0 });
+
+        expect(() => pt.$do.setY(3)).toThrow(/is not a function/);
+        expect(history).toEqual([
+          { x: 0, y: 0, z: 0 },
+          { x: 0, z: 0 },
+        ]);
+      });
+    });
+  });
   describe('branches', () => {
     describe('(object)', () => {
       it('should have consistent branch values', () => {

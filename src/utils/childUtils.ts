@@ -1,4 +1,10 @@
-import { FORM_ARRAY, FORM_MAP, FORM_OBJECT, FORM_VALUE } from '../constants';
+import {
+  ABSENT,
+  FORM_ARRAY,
+  FORM_MAP,
+  FORM_OBJECT,
+  FORM_VALUE, TypeType,
+} from '../constants';
 import { isThere, detectForm } from './tests';
 
 export function getKey(value: any, key: any, vType: any = null): any {
@@ -79,4 +85,36 @@ export function keys(obj, stringify = false) {
       break;
   }
   return out;
+}
+
+export function delKeys(obj, keys, type: TypeType = ABSENT, collapse = false) {
+  if (!obj) return obj;
+  if (!isThere(type)) return delKeys(obj, keys, detectForm(obj), collapse);
+  switch (type) {
+    case FORM_OBJECT:
+      keys.forEach(key => {
+        delete obj[key];
+      });
+      break;
+
+    case FORM_MAP:
+      keys.forEach(key => {
+        obj.delete(key);
+      });
+      break;
+
+    case FORM_ARRAY:
+      if (collapse) {
+        obj = obj.filter((_, key) => {
+          return !keys.includes(key);
+        });
+      } else
+        obj = obj.map((value, key) => {
+          return keys.includes(key) ? undefined : value;
+        });
+
+      break;
+  }
+
+  return obj;
 }

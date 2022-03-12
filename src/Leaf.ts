@@ -19,9 +19,11 @@ import {
   testForType,
   detectType,
   isCompound,
+  delKeys, isArr,
 } from './utils';
 import {
   ABSENT,
+  CHANGE_ABSOLUTE,
   CHANGE_DOWN,
   CHANGE_UP,
   FORM_ARRAY,
@@ -461,7 +463,9 @@ export default class Leaf {
     this.transact(() => {
       let updatedValue = value;
 
-      if (this._initialized && isCompound(this.form)) {
+      if (direction === CHANGE_ABSOLUTE) {
+        direction = ABSENT;
+      } else if (this._initialized && isCompound(this.form)) {
         try {
           updatedValue = makeValue(value, this.value);
         } catch (err) {
@@ -638,6 +642,10 @@ export default class Leaf {
    * @param fn
    */
   transact(fn) {
+    if (this._isStopped) {
+      throw e('cannot perform transaction after a leaf is stopped', { fn });
+    }
+
     const startMax = this.maxVersion;
     const startHighest = this.highestVersion;
     const token = this.pushTrans(
@@ -666,8 +674,6 @@ export default class Leaf {
         this.broadcast();
       }
       this.bugLog('--- post advance: ', true);
-    } else {
-      this.bugLog('---------- done with next; still in transaction');
     }
     return out;
   }
@@ -796,6 +802,45 @@ export default class Leaf {
     });
   }
 
+  /* -------------------- delKeys -------------------- */
+
+  delKeys(...keys) {
+    if (isArr(keys[0])) {
+      return this.delKeys(...keys[0]);
+    }
+    if (!keys.length) return;
+
+    keys.forEach(key => {
+      if (this._branches && this.branches.has(key)) {
+        this.branches.get(key).complete();
+        this.branches.delete(key);
+      }
+
+      try {
+        const actionName = `set${ucFirst(key)}`;
+        if (this._$do && actionName in this._$do) {
+          delete this._$do[actionName];
+        }
+      } catch (err) {
+        this.bugLog(`cannot delete action for key ${key}`);
+      }
+    });
+
+    const value = delKeys(clone(this.value), keys);
+    this.next(value, CHANGE_ABSOLUTE);
+  }
+
+  complete() {
+    if (this._branches) {
+      this.branches.forEach(branch => {
+        branch.complete();
+      });
+    }
+    this.branches.clear();
+    if (this._subject) this._subject.complete();
+    this._isStopped = true;
+  }
+
   /* ------------------- Actions --------------------- */
 
   private _$do: any;
@@ -829,6 +874,9 @@ export default class Leaf {
   }
 
   set(name, value: any) {
+    if (this._isStopped) {
+      throw e('cannot set after a branch is stopped', { name, value });
+    }
     if (this._branches && this._branches.has(name)) {
       this.branch(name).next(value);
     } else {
@@ -865,11 +913,5 @@ export default class Leaf {
   public _isStopped = false;
   get isStopped() {
     return this._isStopped;
-  }
-  complete() {
-    if (this._subject) {
-      this._subject.complete();
-    }
-    this._isStopped = true;
   }
 }
