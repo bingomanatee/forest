@@ -19,7 +19,8 @@ import {
   testForType,
   detectType,
   isCompound,
-  delKeys, isArr,
+  delKeys,
+  isArr,
 } from './utils';
 import {
   ABSENT,
@@ -222,7 +223,7 @@ export default class Leaf {
     return this._parent;
   }
 
-  /*  
+  /*
     the highest version that has ever been used;
     should be true for the entire tree,
     as changes to any branch version cascade to the parent,
@@ -248,8 +249,11 @@ export default class Leaf {
     return this.root._maxVersion();
   }
 
+  /**
+   * this is the max version number present in this leaf, now.
+   */
   _maxVersion() {
-    let version = this.version;
+    let version = this.version === null ? 0 : this.version;
     if (this._branches) {
       this.branches.forEach(branch => {
         version = Math.max(version, branch._maxVersion());
@@ -259,20 +263,27 @@ export default class Leaf {
     return version;
   }
 
-  // the current version of this leaf. A leaf can have children with lower version numbers than it,
-  // but a leaf should never have children with higher versions than it.
-  private _version = 0;
-  get version(): number {
+  /*
+  the current version of this leaf. A leaf can have children with lower version numbers than it,
+  but a leaf should never have children with higher versions than it.
+  note - version is set to null for transient values inside a transact(); the outermost transact
+  will advance all dirty data to the next version, and rollback will purge it back to a known prior one.
+*/
+
+  private _version: number | null = 0;
+  get version(): number | null {
     return this._version;
   }
 
-  set version(value: number) {
+  set version(value: number | null) {
     if (!this.root._initialized) {
       this._version = 0;
       return;
     }
     this._version = value;
-    if (value > this.root.highestVersion) this.root.highestVersion = value;
+    if (value !== null && value > this.root.highestVersion) {
+      this.root.highestVersion = value;
+    }
   }
 
   get root(): Leaf {
@@ -307,9 +318,15 @@ export default class Leaf {
 
   addTest(test: (any) => any) {
     this.on('change', (change: Change) => {
-      const error = test(change);
-      if (error) {
-        change.error = error;
+      try {
+        const error = test(change);
+        if (error) {
+          change.error = error;
+        }
+      } catch (err) {
+        if (!change.isStopped) {
+          change.error = err;
+        }
       }
     });
   }
@@ -477,10 +494,23 @@ export default class Leaf {
         this.value,
         ' to ',
         updatedValue,
-        'from ',
-        value
+        ' due to value ',
+        value,
+        ' version is  ',
+        this.version
       );
+      if (
+        !(
+          this.version !== null &&
+          this._history &&
+          this.history.get(this.version) === this.value
+        )
+      ) {
+        this.snapshot();
+      }
+
       this.value = updatedValue;
+      this.version = null;
       // a map of branch: newValue key pairs.
       // the entire branch is saved as a key for convenience
       const rootChange = new Change(value, this, updatedValue);
@@ -557,12 +587,12 @@ export default class Leaf {
 
   /*
     transactions are global and managed from the root of the tree.
-    They are stored in an array and tracked in a BehaviorSubject 
-    that stores a set from that array. 
-    
+    They are stored in an array and tracked in a BehaviorSubject
+    that stores a set from that array.
+
     The nature of what token is stored in the array is not really important
-    as long as its referentially unique; as such, symbols make good 
-    transaction tokens. 
+    as long as its referentially unique; as such, symbols make good
+    transaction tokens.
      */
 
   private _transSubject: SubjectLike<Set<any>> | null = null;
@@ -646,6 +676,9 @@ export default class Leaf {
       throw e('cannot perform transaction after a leaf is stopped', { fn });
     }
 
+    if (!this.inTransaction) {
+      this.bugLogJ('(((( starting transaction');
+    }
     const startMax = this.maxVersion;
     const startHighest = this.highestVersion;
     const token = this.pushTrans(
@@ -656,7 +689,7 @@ export default class Leaf {
       out = fn();
     } catch (err) {
       this.popTrans(token);
-      this.rollbackTo(startMax);
+      if (startMax !== null) this.rollbackTo(startMax);
       throw e(err, { leaf: this });
     }
     this.popTrans(token);
@@ -672,8 +705,8 @@ export default class Leaf {
         this.highestVersion !== startHighest
       ) {
         this.broadcast();
+        this.bugLog('--- post advance broadcast ');
       }
-      this.bugLog('--- post advance: ', true);
     }
     return out;
   }
@@ -711,7 +744,7 @@ export default class Leaf {
   /**
    * returns the latest snapshot tuple whose version <= version.
    * @param version
-   * @returns {{vetsion: number, value: any} | null}
+   * @returns {{version: number, value: any} | null}
    */
   _getSnap(version: number): { version: number; value: any } | null {
     if (this._history) {
@@ -735,7 +768,7 @@ export default class Leaf {
       if (foundVersion === null) return null;
       return { version: foundVersion, value: foundValue };
     }
-    if (this.version <= version) {
+    if (this.version !== null && this.version <= version) {
       return {
         version: this.version,
         value: this.value,
@@ -768,16 +801,13 @@ export default class Leaf {
    */
   rollbackTo(version: number, rollingForward = false) {
     if (!rollingForward) {
-      this.bugLogJ('< < < < < < rolling back ', version);
       this.root.rollbackTo(version, true);
-      this.bugLog('< < < < < < post rolling back: ');
-
       return;
     }
 
     // either  at parent, or rolling forward from parent
 
-    if (this.version > version) {
+    if (this._dirty || this.version === null || this.version > version) {
       // at this point we do have a value that needs to be redacted
 
       const snap = this._getSnap(version);
