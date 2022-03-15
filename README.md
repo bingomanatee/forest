@@ -354,7 +354,6 @@ numLeaf.next(10);
 
 ```
 
-
 ## Options
 
 The second property of Leaf can be an object with any/all/none of these properties:
@@ -397,3 +396,13 @@ functions that might be in flight.
 calling `complete()` sets the `.isStopped` read-only boolean to be set to true; if you are writing actions that can 
 directly or indirectly trigger `complete()`, you may want to double-check `.isStopped` inside your own code to ensure
 your leaf is still active.
+
+## Immer integration
+
+LeafImmer is a class with all the properties of Leaf that wraps values with the Immer immutable producers. 
+The value of a LeafImmer will be a frozen value, and won't have any referential links between any values in the leaf. 
+LeafImmer instances can be used as branches for Leafs, but it's inadvisable to use Leaf branches as children of 
+LeafImmer instances.
+
+There are no API or usage differences between LeafImmer and Leaf, other than the fact that LeafImmer can only accept
+immerable and scalar values. 

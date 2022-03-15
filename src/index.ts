@@ -1,2 +1,3 @@
 import Leaf from './Leaf';
-export { Leaf };
+import LeafImmer from './Leaf.immer';
+export { Leaf, LeafImmer };

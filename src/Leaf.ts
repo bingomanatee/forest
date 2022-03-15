@@ -4,13 +4,13 @@ import { BehaviorSubject, SubjectLike } from 'rxjs';
 import { Change } from './Change';
 import {
   getKey,
-  setKey,
   toMap,
   clone,
   detectForm,
   isThere,
   hasKey,
   makeValue,
+  setKey,
   e,
   keys,
   ucFirst,
@@ -38,6 +38,7 @@ const NO_VALUE = Symbol('no value');
 export default class Leaf {
   constructor(value: any, opts: any = {}) {
     this._e = new EventEmitter();
+    this.debug = !!opts.debug;
     this.value = value;
     this._history = new Map();
     this._transList = [];
@@ -173,6 +174,10 @@ export default class Leaf {
     }
   }
 
+  _branch(value, name) {
+    return new Leaf(value, { parent: this, name });
+  }
+
   /**
    * if no value, returns branch "name";
    * if value is a branch, injects it as a branch at name;
@@ -204,13 +209,13 @@ export default class Leaf {
       });
       return lastBranch;
     }
+
     if (typeof name === 'string' && name.indexOf('.') > 0) {
       return this.branch(name.split(/\./g), value);
     }
 
     if (value !== NO_VALUE) {
-      const branch =
-        value instanceof Leaf ? value : new Leaf(value, { parent: this, name });
+      const branch = value instanceof Leaf ? value : this._branch(value, name);
       branch.config({ name, parent: this });
       this.branches.set(name, branch);
       branch._changeDown();
@@ -293,7 +298,7 @@ export default class Leaf {
 
   type?: symbol | string;
   form?: symbol | string = ABSENT;
-  private _value: any = ABSENT;
+  public _value: any = ABSENT;
   public _dirty = false;
 
   get value(): any {
@@ -476,29 +481,37 @@ export default class Leaf {
     }
   }
 
+  _makeChange(value, direction) {
+    let updatedValue = value;
+
+    if (
+      direction !== CHANGE_ABSOLUTE &&
+      this._initialized &&
+      isCompound(this.form)
+    ) {
+      try {
+        updatedValue = makeValue(this.value, value);
+      } catch (err) {
+        updatedValue = value;
+      }
+    }
+    this.bugLog(
+      'Leaf --- >>> setting value from ',
+      this.value,
+      ' to ',
+      updatedValue,
+      'from ',
+      value
+    );
+    return new Change(value, this, updatedValue);
+  }
+
   _changeValue(value, direction = ABSENT) {
     this.transact(() => {
-      let updatedValue = value;
-
+      const rootChange = this._makeChange(value, direction);
       if (direction === CHANGE_ABSOLUTE) {
         direction = ABSENT;
-      } else if (this._initialized && isCompound(this.form)) {
-        try {
-          updatedValue = makeValue(value, this.value);
-        } catch (err) {
-          updatedValue = value;
-        }
       }
-      this.bugLog(
-        '--- >>> setting value from ',
-        this.value,
-        ' to ',
-        updatedValue,
-        ' due to value ',
-        value,
-        ' version is  ',
-        this.version
-      );
       if (
         !(
           this.version !== null &&
@@ -509,11 +522,8 @@ export default class Leaf {
         this.snapshot();
       }
 
-      this.value = updatedValue;
+      this.value = rootChange.next;
       this.version = null;
-      // a map of branch: newValue key pairs.
-      // the entire branch is saved as a key for convenience
-      const rootChange = new Change(value, this, updatedValue);
       try {
         rootChange.target.e.emit('change', rootChange);
         if (rootChange.error) throw rootChange.error;
@@ -546,13 +556,9 @@ export default class Leaf {
       });
     }
 
-    if (!this.root._initialized) {
-      this.value = value;
-      return;
-    }
-    this.bugLog('setting ', this.name, 'to', value, direction);
+    this.bugLog('next:setting ', this.name, 'to', value, direction);
 
-    if (!this.type) {
+    if (this.root._initialized && !this.type) {
       // if type is present, skip checkForm - there is a test for type in tests
       this._checkForm(value);
     }
@@ -834,6 +840,10 @@ export default class Leaf {
 
   /* -------------------- delKeys -------------------- */
 
+  _delKeys(keys) {
+    return delKeys(clone(this.value), keys);
+  }
+
   delKeys(...keys) {
     if (isArr(keys[0])) {
       return this.delKeys(...keys[0]);
@@ -856,7 +866,7 @@ export default class Leaf {
       }
     });
 
-    const value = delKeys(clone(this.value), keys);
+    const value = this._delKeys(keys);
     this.next(value, CHANGE_ABSOLUTE);
   }
 

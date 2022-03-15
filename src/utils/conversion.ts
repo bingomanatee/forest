@@ -65,10 +65,10 @@ export function toObj(m: any, force = false) {
  *
  * for simple/scalar types returns the first parameter.
  *
- * @param update any
  * @param base any
+ * @param update any
  */
-export function makeValue(update, base) {
+export function makeValue(base, update) {
   const baseType = detectForm(base);
   const updateType = detectForm(update);
 

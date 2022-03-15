@@ -233,7 +233,7 @@ export function clone(value, type: symbol | string = ABSENT) {
   return out;
 }
 
-const FIND_SYMBOL = /Symbol\((.*)\)/;
+const FIND_SYMBOL = /Symbol\((.*:)?(.*)\)/;
 
 /** used in a test filter to throw errors if the value deviates
  * from the leaf's expectations;
@@ -255,12 +255,12 @@ export function testForType({ next: next, target }): string | null {
       if (!target.type.includes(nextType)) {
         out = `type cannot be ${nextType
           .toString()
-          .replace(FIND_SYMBOL, (_, name) => name)}`;
+          .replace(FIND_SYMBOL, (_, _prefix, name) => name)}`;
       }
     } else if (nextType !== target.type) {
       out = `type must be ${target.type
         .toString()
-        .replace(FIND_SYMBOL, (_, name) => name)}`;
+        .replace(FIND_SYMBOL, (_, _prefix, name) => name)}`;
     }
   }
   return out;
