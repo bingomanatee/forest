@@ -132,7 +132,7 @@ describe('Leaf', () => {
         expect(point.branch('z').version).toBe(1);
       });
 
-      describe('rollback', () => {
+      describe('.rollbackTo', () => {
         it('should roll back to a snapshot', () => {
           const point = new Leaf(
             {},
@@ -498,7 +498,7 @@ describe('Leaf', () => {
     });
   });
 
-  describe('tests', () => {
+  describe('type', () => {
     function makeLeaf() {
       return new Leaf(
         {},
@@ -552,6 +552,29 @@ describe('Leaf', () => {
 
       typeLeaf.$do.setStr('gamma');
       expect(typeLeaf.value.str).toBe('gamma');
+    });
+  });
+
+  describe('tests', () => {
+    it('should restrict changes based on a test', () => {
+      const numLeaf = new Leaf(0, {
+        test({ next }): string | void {
+          if (next % 2) return 'must be even';
+        },
+        debug: false,
+      });
+
+      numLeaf.next(4);
+      expect(numLeaf.value).toBe(4);
+
+      expect(() => {
+        numLeaf.next(5);
+      }).toThrow(/must be even/);
+
+      expect(numLeaf.value).toBe(4);
+
+      numLeaf.next(6);
+      expect(numLeaf.value).toBe(6);
     });
   });
 });
