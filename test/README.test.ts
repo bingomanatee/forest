@@ -27,7 +27,7 @@ describe('Leaf', () => {
     try {
       numLeaf.next(-4);
     } catch (err2) {
-     //  console.log('error 2:', err2);
+      //  console.log('error 2:', err2);
     }
     // console.log('leaf is still', numLeaf.value);
     numLeaf.next(10);

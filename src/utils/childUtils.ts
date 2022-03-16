@@ -3,7 +3,8 @@ import {
   FORM_ARRAY,
   FORM_MAP,
   FORM_OBJECT,
-  FORM_VALUE, TypeType,
+  FORM_VALUE,
+  TypeType,
 } from '../constants';
 import { isThere, detectForm } from './tests';
 

@@ -1,12 +1,4 @@
-import {
-  isMap,
-  isObj,
-  isStr,
-  isNum,
-  e,
-  detectForm,
-  isThere,
-} from './tests';
+import { isMap, isObj, isStr, isNum, e, detectForm, isThere } from './tests';
 import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
 
 export function toMap(m: any, force = false) {
