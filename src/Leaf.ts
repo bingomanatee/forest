@@ -7,7 +7,6 @@ import {
   toMap,
   clone,
   detectForm,
-  isThere,
   hasKey,
   makeValue,
   setKey,
@@ -32,6 +31,7 @@ import {
   FORM_OBJECT,
   TYPE_ANY,
 } from './constants';
+import { symboly } from './types';
 
 const NO_VALUE = Symbol('no value');
 
@@ -40,7 +40,6 @@ export default class Leaf {
     this._e = new EventEmitter();
     this.debug = !!opts.debug;
     this.value = value;
-    this._history = new Map();
     this._transList = [];
     this.config(opts);
 
@@ -155,7 +154,9 @@ export default class Leaf {
   _flushJournal() {
     this._version = 0;
     this._highestVersion = 0;
-    this._history.clear();
+    if (this._history) {
+      this.history.clear();
+    }
     this._dirty = false;
     this.snapshot(0);
     this.branches.forEach(b => b._flushJournal());
@@ -296,8 +297,8 @@ export default class Leaf {
     return this;
   }
 
-  type?: symbol | string;
-  form?: symbol | string = ABSENT;
+  type?: symboly;
+  form?: symboly;
   public _value: any = ABSENT;
   public _dirty = false;
 
@@ -311,12 +312,8 @@ export default class Leaf {
    * @param value
    */
   set value(value: any) {
-    const form = detectForm(value);
     if (this._value === value) return;
-    if (!isThere(this.form)) {
-      // initialize form to first time value is set.
-      this.form = form;
-    }
+    if (!this.form) this.form = detectForm(value);
     this._value = value;
     if (this._initialized) this._dirty = true;
   }
@@ -506,7 +503,7 @@ export default class Leaf {
     return new Change(value, this, updatedValue);
   }
 
-  _changeValue(value, direction = ABSENT) {
+  _changeValue(value, direction: symboly = ABSENT) {
     this.transact(() => {
       const rootChange = this._makeChange(value, direction);
       if (direction === CHANGE_ABSOLUTE) {
@@ -548,7 +545,7 @@ export default class Leaf {
    * @param value
    * @param direction
    */
-  next(value: any, direction: symbol = ABSENT) {
+  next(value: any, direction: symboly = ABSENT) {
     if (this.isStopped) {
       throw e('cannot next() a stopped Leaf', {
         value,
@@ -720,11 +717,11 @@ export default class Leaf {
   private _subject: SubjectLike<any> | null = null;
 
   subscribe(listener: any) {
+    if (this.isStopped) {
+      throw e('cannot subscribe to stopped Leaf', { target: this });
+    }
     if (!this._subject) {
       this._subject = new BehaviorSubject(this.value);
-      if (this.isStopped) {
-        this._subject.complete();
-      }
     }
     return this._subject.subscribe(listener);
   }
@@ -733,14 +730,14 @@ export default class Leaf {
     this.e.emit('updated', this);
   }
 
-  private _history: Map<number, any>;
+  private _history?: Map<number, any>;
   get history() {
+    if (!this._history) this._history = new Map();
     return this._history;
   }
 
   snapshot(version = 0) {
-    if (!this._history) this._history = new Map();
-    this._history.set(version, this.value);
+    this.history.set(version, this.value);
   }
 
   get isRoot() {
@@ -792,7 +789,7 @@ export default class Leaf {
       const keys = Array.from(this._history.keys());
       keys.forEach(kVersion => {
         if (kVersion > version) {
-          this._history.delete(kVersion);
+          this.history.delete(kVersion);
         }
       });
     }
