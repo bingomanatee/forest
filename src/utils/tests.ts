@@ -15,7 +15,7 @@ import {
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const isNumber = require('lodash/isNumber');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const sortBy = require('lodash.sortBy');
+const sortBy = require('lodash/sortBy');
 
 export function isThere(item) {
   return ![ABSENT, NAME_UNNAMED, undefined].includes(item);
