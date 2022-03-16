@@ -4,7 +4,7 @@ import { toMap } from '../src/utils';
 
 // import { inspect } from 'util';
 
-describe('Leaf', () => {
+describe.skip('Leaf', () => {
   describe('constructor', () => {
     it('has the right value', () => {
       const l = new Leaf(3);

@@ -9,7 +9,6 @@ import {
   detectForm,
   isThere,
   hasKey,
-  makeValue,
   setKey,
   e,
   keys,
@@ -18,9 +17,9 @@ import {
   isFn,
   testForType,
   detectType,
-  isCompound,
   delKeys,
   isArr,
+  isNum,
 } from './utils';
 import {
   ABSENT,
@@ -32,6 +31,7 @@ import {
   FORM_OBJECT,
   TYPE_ANY,
 } from './constants';
+import { symboly } from './types';
 
 const NO_VALUE = Symbol('no value');
 
@@ -40,7 +40,6 @@ export default class Leaf {
     this._e = new EventEmitter();
     this.debug = !!opts.debug;
     this.value = value;
-    this._history = new Map();
     this._transList = [];
     this.config(opts);
 
@@ -296,8 +295,8 @@ export default class Leaf {
     return this;
   }
 
-  type?: symbol | string;
-  form?: symbol | string = ABSENT;
+  type?: symboly;
+  form?: symboly = ABSENT;
   public _value: any = ABSENT;
   public _dirty = false;
 
@@ -467,10 +466,14 @@ export default class Leaf {
     });
   }
 
+  /**
+   * merge the branches' value into this leaf's value
+   * @param branch
+   */
   _changeFromBranch(branch) {
     if (branch.name && this.branch(branch.name) === branch) {
       const value = clone(this.value);
-      setKey(value, branch.name, branch.value, this.form);
+      setKey(value, branch.name, branch.value, this.form); // @TODO: a more minimal form?
       this.next(value, CHANGE_DOWN);
     }
   }
@@ -481,46 +484,42 @@ export default class Leaf {
     }
   }
 
-  _makeChange(value, direction) {
-    let updatedValue = value;
-
-    if (
-      direction !== CHANGE_ABSOLUTE &&
-      this._initialized &&
-      isCompound(this.form)
-    ) {
-      try {
-        updatedValue = makeValue(this.value, value);
-      } catch (err) {
-        updatedValue = value;
-      }
-    }
-    this.bugLog(
-      'Leaf --- >>> setting value from ',
-      this.value,
-      ' to ',
-      updatedValue,
-      'from ',
-      value
-    );
-    return new Change(value, this, updatedValue);
-  }
+  // /**
+  //  * define a change
+  //  * @param value
+  //  * @param direction
+  //  */
+  // _makeChange(value, direction) {
+  //   let updatedValue = value;
+  //
+  //   if (
+  //     direction !== CHANGE_ABSOLUTE &&
+  //     this._initialized &&
+  //     isCompound(this.form)
+  //   ) {
+  //     try {
+  //       updatedValue = makeValue(this.value, value);
+  //     } catch (err) {
+  //       updatedValue = value;
+  //     }
+  //   }
+  //   this.bugLog(
+  //     'Leaf --- >>> setting value from, to ',
+  //     this.value,
+  //     updatedValue,
+  //     'value ',
+  //     value
+  //   );
+  //   return new Change(value, this, updatedValue);
+  // }
 
   _changeValue(value, direction = ABSENT) {
     this.transact(() => {
-      const rootChange = this._makeChange(value, direction);
+      const rootChange = Change.forTargetValue(this, value, direction);
       if (direction === CHANGE_ABSOLUTE) {
         direction = ABSENT;
       }
-      if (
-        !(
-          this.version !== null &&
-          this._history &&
-          this.history.get(this.version) === this.value
-        )
-      ) {
-        this.snapshot();
-      }
+      this.snapshot();
 
       this.value = rootChange.next;
       this.version = null;
@@ -717,14 +716,15 @@ export default class Leaf {
     return out;
   }
 
-  private _subject: SubjectLike<any> | null = null;
+  private _subject?: SubjectLike<any>;
 
   subscribe(listener: any) {
+    if (this.isStopped) {
+      throw e('cannot subscribe to a completed Leaf', { target: this });
+    }
+
     if (!this._subject) {
       this._subject = new BehaviorSubject(this.value);
-      if (this.isStopped) {
-        this._subject.complete();
-      }
     }
     return this._subject.subscribe(listener);
   }
@@ -733,14 +733,15 @@ export default class Leaf {
     this.e.emit('updated', this);
   }
 
-  private _history: Map<number, any>;
+  private _history: Map<number, any> = new Map();
   get history() {
     return this._history;
   }
 
   snapshot(version = 0) {
-    if (!this._history) this._history = new Map();
-    this._history.set(version, this.value);
+    if (isNum(this.value)) {
+      this.history.set(version, this.value);
+    }
   }
 
   get isRoot() {
@@ -753,27 +754,26 @@ export default class Leaf {
    * @returns {{version: number, value: any} | null}
    */
   _getSnap(version: number): { version: number; value: any } | null {
-    if (this._history) {
-      if (this._history.has(version)) {
-        return {
-          version,
-          value: this._history.get(version),
-        };
-      }
-
-      let foundValue = null;
-      let foundVersion: number | null = null;
-      this._history.forEach((value, hVersion) => {
-        if (hVersion > version) return;
-        // @ts-ignore
-        if (foundVersion === null || foundVersion < hVersion) {
-          foundVersion = hVersion;
-          foundValue = value;
-        }
-      });
-      if (foundVersion === null) return null;
-      return { version: foundVersion, value: foundValue };
+    if (this.history.has(version)) {
+      return {
+        version,
+        value: this.history.get(version),
+      };
     }
+
+    let foundValue = null;
+    let foundVersion: number | null = null;
+    this.history.forEach((value, hVersion) => {
+      if (hVersion > version) return;
+      // @ts-ignore
+      if (foundVersion === null || foundVersion < hVersion) {
+        foundVersion = hVersion;
+        foundValue = value;
+      }
+    });
+    if (foundVersion !== null)
+      return { version: foundVersion, value: foundValue };
+
     if (this.version !== null && this.version <= version) {
       return {
         version: this.version,
@@ -788,14 +788,12 @@ export default class Leaf {
    * @param version
    */
   _purgeHistoryAfter(version: number) {
-    if (this._history) {
-      const keys = Array.from(this._history.keys());
-      keys.forEach(kVersion => {
-        if (kVersion > version) {
-          this._history.delete(kVersion);
-        }
-      });
-    }
+    const keys = Array.from(this.history.keys());
+    keys.forEach(kVersion => {
+      if (kVersion > version && this.history) {
+        this.history.delete(kVersion);
+      }
+    });
   }
 
   /**

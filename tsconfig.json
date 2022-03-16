@@ -2,6 +2,7 @@
   // see https://www.typescriptlang.org/tsconfig to better understand tsconfigs
   "include": ["src", "types", "test"],
   "compilerOptions": {
+    "experimentalDecorators": true,
     "module": "esnext",
     "lib": ["dom", "esnext"],
     "importHelpers": true,
@@ -36,6 +37,6 @@
       "./typings",
       "./node_modules/@types/"
     ],
-    "noImplicitAny": false,
+    "noImplicitAny": false
   },
 }

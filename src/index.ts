@@ -1,3 +1,4 @@
 import Leaf from './Leaf';
 import LeafImmer from './Leaf.immer';
-export { Leaf, LeafImmer };
+import * as utils from './utils';
+export { Leaf, LeafImmer, utils };

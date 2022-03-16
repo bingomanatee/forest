@@ -1,7 +1,6 @@
 import { produce } from 'immer';
 
-import lazy from './lazy';
-
+export * from './lazy';
 export * from './childUtils';
 export * from './tests';
 export * from './conversion';
@@ -14,4 +13,4 @@ function asImmer(value) {
   }
 }
 
-export { lazy, produce, asImmer };
+export { produce, asImmer };
