@@ -3,5 +3,5 @@ export type symboly = symbol | string | undefined;
 export type LeafType = {
   value: any;
   form?: symboly;
-  bugLog: Function;
+  bugLog: (...any) => void;
 };
