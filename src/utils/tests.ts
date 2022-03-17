@@ -12,8 +12,10 @@ import {
   TYPE_ANY,
 } from '../constants';
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const isNumber = require('lodash/isNumber');
-const sortBy = require('lodash.sortBy');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sortBy = require('lodash/sortBy');
 
 export function isThere(item) {
   return ![ABSENT, NAME_UNNAMED, undefined].includes(item);
@@ -240,7 +242,7 @@ const FIND_SYMBOL = /Symbol\((.*:)?(.*)\)/;
  * @param next
  * @param target
  */
-export function testForType({ next: next, target }): string | null {
+export function testForType({ next, target }): string | null {
   if (target.type === TYPE_ANY) return null;
   let out: any = null;
   if (!target.type) {
