@@ -635,8 +635,7 @@ export default class Leaf {
       this.bugLogN(1, '---->>> translist = ', list);
       this._transList = list;
       this.transSubject.next(new Set(list));
-    }
-    else this.root.transList = list;
+    } else this.root.transList = list;
   }
 
   /**
@@ -694,7 +693,11 @@ export default class Leaf {
     const startMax = this.maxVersion;
     const startHighest = this.highestVersion;
     const token = this.pushTrans(
-      Symbol(`leaf ${this.name}, version ${startMax}, ${Math.round(Math.random() * 10000)}`)
+      Symbol(
+        `leaf ${this.name}, version ${startMax}, ${Math.round(
+          Math.random() * 10000
+        )}`
+      )
     );
     let out;
     try {
@@ -708,7 +711,9 @@ export default class Leaf {
     }
     if (!this.inTransaction) {
       this.bugLogJ(
-        `----------!!------------ done with set value:`,  this.value, `of ${this.name}not in trans - advancing`
+        `----------!!------------ done with set value:`,
+        this.value,
+        `of ${this.name}not in trans - advancing`
       );
 
       const dirtyLeaves = this.root.advance(this.highestVersion + 1);
@@ -717,10 +722,14 @@ export default class Leaf {
         this.maxVersion !== startMax ||
         this.highestVersion !== startHighest
       ) {
-        dirtyLeaves.forEach((leaf) => leaf.broadcast());
+        dirtyLeaves.forEach(leaf => leaf.broadcast());
       }
     } else {
-      this.bugLogN(2, '----------!!-------------- transaction still active', this.root.transList);
+      this.bugLogN(
+        2,
+        '----------!!-------------- transaction still active',
+        this.root.transList
+      );
     }
     this.bugLog('end of ', token);
     return out;
@@ -848,9 +857,8 @@ export default class Leaf {
     this.on('updated', (target: Leaf) => {
       if (!target.inTransaction) {
         this.subject.next(this.value);
-        this.bugLog( 'broadcasting');
-      }
-      else {
+        this.bugLog('broadcasting');
+      } else {
         this.bugLogN(2, 'skipping updated');
       }
     });
@@ -927,17 +935,17 @@ export default class Leaf {
 
     if (this._branches) {
       this.branches.forEach((_branch, key) => {
-        if (!(valKeys.includes(key))) {
+        if (!valKeys.includes(key)) {
           this.addAction(
-              `set${ucFirst(key)}`,
-              (leaf, value) => {
-                return leaf.set(key, value);
-              },
-              true,
-              true
+            `set${ucFirst(key)}`,
+            (leaf, value) => {
+              return leaf.set(key, value);
+            },
+            true,
+            true
           );
         }
-      })
+      });
     }
     this._makeDo();
   }

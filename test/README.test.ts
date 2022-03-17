@@ -1,11 +1,11 @@
-import {Leaf} from '../src';
+import { Leaf } from '../src';
 
 // import { inspect } from 'util';
 
 describe('README', () => {
   it('should allow for value tests', () => {
     const numLeaf = new Leaf(0, {
-      test({next}): string | void {
+      test({ next }): string | void {
         if (next < 0) throw new Error('cannot be negative');
         if (next % 2) return 'must be even';
       },
@@ -33,24 +33,27 @@ describe('README', () => {
     numLeaf.next(10);
   });
   describe('docs', () => {
-
     it('box example', () => {
       function point(x, y) {
-        return new Leaf({x, y}, {
-          branches: {
-            x: new Leaf(x, {type: true}),
-            y: new Leaf(y, {type: true})
+        return new Leaf(
+          { x, y },
+          {
+            branches: {
+              x: new Leaf(x, { type: true }),
+              y: new Leaf(y, { type: true }),
+            },
           }
-        });
+        );
       }
 
-      const box = new Leaf({
-          color: 'red'
+      const box = new Leaf(
+        {
+          color: 'red',
         },
         {
           branches: {
             topLeft: point(0, 0),
-            bottomRight: point(1, 1)
+            bottomRight: point(1, 1),
           },
           actions: {
             width(leaf) {
@@ -61,82 +64,85 @@ describe('README', () => {
             },
             area(leaf) {
               return leaf.do.width() * leaf.do.height();
-            }
-          }
-        });
+            },
+          },
+        }
+      );
 
-      box.subscribe((value) => {
+      box.subscribe(value => {
         console.log('... is now', value);
       });
 
-      box.do.setBottomRight({x: 50, y: 50});
+      box.do.setBottomRight({ x: 50, y: 50 });
       console.log('box area:', box.do.area());
-    })
+    });
 
     describe('login form 2', () => {
-
       function makeField(title, type, validator) {
-        return new Leaf({
+        return new Leaf(
+          {
             title,
             value: '',
             type,
-            touched: false
+            touched: false,
           },
           {
             actions: {
               update(leaf, value) {
-                leaf.do.setValue(value)
+                leaf.do.setValue(value);
                 leaf.do.setTouched(true);
               },
               isValid(leaf) {
-                return !leaf.do.errors()
+                return !leaf.do.errors();
               },
               isEmpty(leaf) {
-                return !leaf.value.value
+                return !leaf.value.value;
               },
               errors(leaf) {
                 if (leaf.do.isEmpty()) {
-                  return 'must have a value'
+                  return 'must have a value';
                 }
-                return validator(leaf.value.value)
-              }
-            }
-          })
+                return validator(leaf.value.value);
+              },
+            },
+          }
+        );
       }
 
       function makeLogin() {
-        return new Leaf({
+        return new Leaf(
+          {
             status: 'entering',
-            response: null
+            response: null,
           },
           {
             branches: {
               // @ts-ignore
-              username: makeField('User Name', 'text', (value) => {
+              username: makeField('User Name', 'text', value => {
                 if (/[\s]+/.test(value)) {
-                  return 'username cannot have spaces'
+                  return 'username cannot have spaces';
                 }
               }),
               // @ts-ignore
-              password: makeField('Password', 'password', (value) => {
+              password: makeField('Password', 'password', value => {
                 if (/[\s]+/.test(value)) {
-                  return 'password cannot have spaces'
+                  return 'password cannot have spaces';
                 }
-              })
+              }),
             },
             actions: {
               isReady(leaf) {
-                return !!(leaf.value.password && leaf.value.username)
+                return !!(leaf.value.password && leaf.value.username);
               },
               reset(leaf) {
                 leaf.next({
                   status: 'entering',
                   response: null,
-                  password: {value: '', touched: false},
-                  username: {value: '', touched: false}
-                })
-              }
-            }
+                  password: { value: '', touched: false },
+                  username: { value: '', touched: false },
+                });
+              },
+            },
           }
         );
       }
@@ -145,7 +151,7 @@ describe('README', () => {
         const login = makeLogin();
 
         let current;
-        login.subscribe(value => current = value);
+        login.subscribe(value => (current = value));
 
         expect(current.username.touched).toBeFalsy();
         expect(current.username.error).toBeFalsy();
@@ -162,7 +168,7 @@ describe('README', () => {
         const login = makeLogin();
 
         let current;
-        login.subscribe(value => current = value);
+        login.subscribe(value => (current = value));
 
         login.branch('username').do.update('foo');
         login.branch('password').do.update('bad pass');
@@ -172,8 +178,8 @@ describe('README', () => {
 
         expect(current.username.value).toBe('');
         expect(current.username.title).toBe('User Name');
-      })
-    })
+      });
+    });
   });
 
   describe('actions', () => {
