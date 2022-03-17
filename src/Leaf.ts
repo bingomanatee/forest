@@ -135,9 +135,11 @@ export default class Leaf {
     return this._e;
   }
 
-  protected on(event: string, listener: (arg0: Change) => void) {
+  protected on(event: string, listener: (arg0: any) => void) {
     this.e.on(event, value => {
-      if (value instanceof Change && value.isStopped) {
+      if (value instanceof Change && value.target.isStopped) {
+        // don't listen
+      } else if (value instanceof Leaf && value.isStopped) {
         // don't listen
       } else {
         listener(value);
@@ -460,7 +462,7 @@ export default class Leaf {
   _changeUp(value) {
     const branchMap = this._getBranchChanges(value);
     branchMap.forEach((newValue, branch) => {
-      branch._changeValue(newValue, CHANGE_UP); // can throw;
+      branch.next(newValue); // can throw;
     });
   }
 
@@ -468,6 +470,7 @@ export default class Leaf {
     if (branch.name && this.branch(branch.name) === branch) {
       const value = clone(this.value);
       setKey(value, branch.name, branch.value, this.form);
+      this.bugLogN(2, '--- >>>>>>>>> changing from branch ', branch.name);
       this.next(value, CHANGE_DOWN);
     }
   }
@@ -567,23 +570,26 @@ export default class Leaf {
    * snapshots all "dirty" branches with the passed-in version and updates the
    * version of the branch.
    * @param version
-   * @return {boolean} whether leaf or any of the branches have been changed;
+   * @return {Leaf[]} an array of dirty leaves;
    */
-  advance(version): boolean {
-    let newDirty = false;
+  advance(version): Leaf[] {
+    let dirtyLeaves: Leaf[] = [];
 
     // at this point the version is the next highest and at parent OR forward
     if (this._dirty) {
       this.version = version;
       this._dirty = false;
       this.snapshot(version);
-      newDirty = true;
+      dirtyLeaves.push(this);
     }
     this.branches.forEach(branch => {
-      if (branch.advance(version)) newDirty = true;
+      const dirtyBranches = branch.advance(version);
+      if (dirtyBranches.length) {
+        dirtyLeaves = [...dirtyLeaves, ...dirtyBranches];
+      }
     });
 
-    return newDirty;
+    return dirtyLeaves;
   }
 
   /* -------------------- transactions ------------------- */
@@ -625,9 +631,12 @@ export default class Leaf {
   }
 
   set transList(list) {
-    this.bugLogN(1, '---->>> translist = ', list);
-    this.root._transList = list;
-    this.transSubject.next(new Set(list));
+    if (this.isRoot) {
+      this.bugLogN(1, '---->>> translist = ', list);
+      this._transList = list;
+      this.transSubject.next(new Set(list));
+    }
+    else this.root.transList = list;
   }
 
   /**
@@ -685,45 +694,53 @@ export default class Leaf {
     const startMax = this.maxVersion;
     const startHighest = this.highestVersion;
     const token = this.pushTrans(
-      Symbol(`leaf ${this.name}, version ${startMax}`)
+      Symbol(`leaf ${this.name}, version ${startMax}, ${Math.round(Math.random() * 10000)}`)
     );
     let out;
     try {
       out = fn();
+      this.popTrans(token);
     } catch (err) {
       this.popTrans(token);
+      this.bugLog('---- error in transaction: ', err);
       if (startMax !== null) this.rollbackTo(startMax);
       throw e(err, { leaf: this });
     }
-    this.popTrans(token);
     if (!this.inTransaction) {
       this.bugLogJ(
-        `done with set value: ${this.value} of ${this.name}not in trans - advancing`
+        `----------!!------------ done with set value:`,  this.value, `of ${this.name}not in trans - advancing`
       );
 
-      const hasDirty = this.root.advance(this.highestVersion + 1);
+      const dirtyLeaves = this.root.advance(this.highestVersion + 1);
       if (
-        hasDirty ||
+        dirtyLeaves.length ||
         this.maxVersion !== startMax ||
         this.highestVersion !== startHighest
       ) {
-        this.broadcast();
-        this.bugLog('--- post advance broadcast ');
+        dirtyLeaves.forEach((leaf) => leaf.broadcast());
       }
+    } else {
+      this.bugLogN(2, '----------!!-------------- transaction still active', this.root.transList);
     }
+    this.bugLog('end of ', token);
     return out;
   }
 
   private _subject: SubjectLike<any> | null = null;
 
+  get subject(): SubjectLike<any> {
+    if (!this._subject) {
+      this._subject = new BehaviorSubject(this.value);
+    }
+    return this._subject;
+  }
+
   subscribe(listener: any) {
     if (this.isStopped) {
       throw e('cannot subscribe to stopped Leaf', { target: this });
     }
-    if (!this._subject) {
-      this._subject = new BehaviorSubject(this.value);
-    }
-    return this._subject.subscribe(listener);
+
+    return this.subject.subscribe(listener);
   }
 
   broadcast() {
@@ -828,9 +845,13 @@ export default class Leaf {
   }
 
   _listenForUpdated() {
-    this.on('updated', () => {
-      if (this._subject && !this.inTransaction) {
-        this._subject.next(this.value);
+    this.on('updated', (target: Leaf) => {
+      if (!target.inTransaction) {
+        this.subject.next(this.value);
+        this.bugLog( 'broadcasting');
+      }
+      else {
+        this.bugLogN(2, 'skipping updated');
       }
     });
   }
@@ -903,6 +924,21 @@ export default class Leaf {
         true
       );
     });
+
+    if (this._branches) {
+      this.branches.forEach((_branch, key) => {
+        if (!(valKeys.includes(key))) {
+          this.addAction(
+              `set${ucFirst(key)}`,
+              (leaf, value) => {
+                return leaf.set(key, value);
+              },
+              true,
+              true
+          );
+        }
+      })
+    }
     this._makeDo();
   }
 
@@ -933,7 +969,6 @@ export default class Leaf {
         this._userActions[name] = (...args) =>
           this.transact(() => fn(this, ...args));
       }
-      this.bugLog('$do sdvanced to ', this.do, 'from', name);
       return true;
     } catch (err) {
       console.warn('cannot addAction', name, fn);
@@ -984,5 +1019,10 @@ export default class Leaf {
   public _isStopped = false;
   get isStopped() {
     return this._isStopped;
+  }
+
+  pipe(...args) {
+    // @ts-ignore
+    return this.subject.pipe(...args);
   }
 }
