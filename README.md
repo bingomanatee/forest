@@ -1,6 +1,6 @@
-# @wonderlandlabs/malt
+# @wonderlandlabs/forest
 
-Malt is a curated state system. Designed to fit the missing niche of a quick, maangeable state
+Forest is a curated state system. Designed to fit the missing niche of a quick, maangeable state
 system, it has an extensive commit cycle with validation, transactions and a streaming notifier.  
 
 # Leaves
@@ -53,7 +53,7 @@ Leaf can branch multiple times; as long as a branch is of type object/Map/array,
 ## Actions
 
 Leaf methods, or actions, allow you to achieve more complex change patterns. They are functions, and can return values. 
-Leaf actions are accessed off a `.$do` object.
+Leaf actions are accessed off a `.do` object.
 
 ### Implicit (inferred) setters
 
@@ -63,13 +63,15 @@ Map and object types will have a set[field] function for every key/property in t
 
 const point = new Leaf({x: 0, y: 0, z: 0});
 
-point.$do.setX(3); 
+point.do.setX(3); 
 // you don't have to configure actions - they auto-populate based on the properties in the initial value
 
 console.log('point is now', point.value);
 // 'point is now', {x: 3, y: 0, z: 0}
 
 ```
+
+### User defined actions
 
 You can also define custom actions. These actions can act on the leaf (the implicit first value)
 and/or return a value. No matter how many changes you execute inside an action, only one change will
@@ -86,9 +88,9 @@ const point = new Leaf(
   {
      actions: {
         addTo: (leaf, x, y, z) => {
-           leaf.$do.setX(leaf.value.x + x);
-           leaf.$do.setY(leaf.value.y + y);
-           leaf.$do.setZ(leaf.value.z + z);
+           leaf.do.setX(leaf.value.x + x);
+           leaf.do.setY(leaf.value.y + y);
+           leaf.do.setZ(leaf.value.z + z);
         },
         length(leaf) {
            return Math.sqrt(
@@ -100,12 +102,12 @@ const point = new Leaf(
 );
 leaf.subscribe({nexg(value) {console.log('leaf is noww', value)}})
 // 'leaf is now', {x: 0, y: 0, z: 0}
-leaf.$do.addTo(3, 6, 9);
+leaf.do.addTo(3, 6, 9);
 // 'leaf is now', {x: 3, y: 6, z: 9}
-leaf.$do.addTo(1, 1, 1);
+leaf.do.addTo(1, 1, 1);
 // 'leaf is now', {x: 4, y: 7, z: 10}
 
-console.log('length', leaf.$do.length());
+console.log('length', leaf.do.length());
 // 'length', 12.84523257866513
 ```
 
@@ -130,28 +132,28 @@ const user = new Leaf(
     actions: {
       save(leaf) {
         if (leaf.value.status !== 'new') return;
-        leaf.$do.setStatus('saving');
+        leaf.do.setStatus('saving');
         axios.put('/api/user/', ({
           name: this.name
         }))
-                .then(leaf.$do.onSave)
-                .catch(leaf.$do.onErr);
+                .then(leaf.do.onSave)
+                .catch(leaf.do.onErr);
       },
       onSave(leaf, {data}) {
-        leaf.$do.setId(data.id);
-        leaf.$do.setStatus('saved');
+        leaf.do.setId(data.id);
+        leaf.do.setStatus('saved');
       },
       onErr(leaf, err) {
-        leaf.$do.setError(err.message);
-        leaf.$do.setStatus('error');
+        leaf.do.setError(err.message);
+        leaf.do.setStatus('error');
       }
     }
   }
 );
 
 leaf.subscribe((val) => console.log(val));
-leaf.$do.setName('Bob');
-leaf.$do.save();
+leaf.do.setName('Bob');
+leaf.do.save();
 console.log('after save');
 
 /**
@@ -161,6 +163,47 @@ console.log('after save');
  * 'after save'
  * {id: 1000, name: 'Bob', status: 'saved', err: null}
  */
+```
+
+### Namesppace conflicts
+
+User actions and set (inferred) actions are stored seperately. Every time an action (of either type) is created,
+the two collections are blended into _do. If you define a setFoo method, it will override any inferred actions. 
+
+You can use this to effect a filter before passing keys:
+
+```javascript
+
+const user = new Leaf(
+        {
+          firstName: '',
+          lastName: '',
+          age: 0,
+          gender: '?',
+        },
+        {
+          actions: {
+            setFirstName(leaf, n) {
+              if (typeof n !== 'string')
+                throw new Error('first name must be a string');
+              leaf.set('firstName', n.trim());
+            },
+            setAge(leaf, age) {
+              if (typeof age === 'string') age = Number.parseInt(age, 10);
+              if (Number.isNaN(age)) {
+                throw new Error('age is only a number');
+              }
+              leaf.set('age', age);
+            },
+          },
+        }
+);
+
+user.do.setFirstName(' Bob  ');
+user.do.setAge('45');
+console.log('user is ', user.value);
+//   user is  { firstName: 'Bob', lastName: '', age: 45, gender: '?' }
+
 ```
 
 ### Async actions
@@ -174,7 +217,7 @@ If you want to use async systems in your leaf, you can either:
 2. write an action that uses promises, and put other actions as listeners inside  
    the `promiseFunction().then(listener).catch(listener)`. 
 
-## value
+## `.value`
 
 THe value of a Leaf can be anything; however, in order not to make branching "wierd", the *form* 
 of a leaf should not change(see below for details); you don't usually want to replace an object with an array,
@@ -193,7 +236,7 @@ leaf.subscribe((val) => console.log(val));
 
 leaf.next({x: 3, z: 4});
 leaf.inferActions();
-leaf.$do.setZ(5);
+leaf.do.setZ(5);
 /**
  * {x: 1, y: 2}
  * {x: 3, y: 2, z: 4}
@@ -221,12 +264,12 @@ and deleted.
       // { x: 0, y: 0, z: 0 },
       // { x: 0, z: 0 },
     
-    pt.$do.setY();
+    pt.do.setY();
     // throws 
 
 ```
 
-## `subscribe(listener)`
+## `.subscribe(listener): subscriber`
 
 Leaves follow the observable pattern of RxJS; it has the following methods/properties:
 
@@ -238,7 +281,31 @@ Leaves follow the observable pattern of RxJS; it has the following methods/prope
 a transaction finishes in which changes have been made. This can ge because of a set action,
 a next() call, etc. 
 
-It returns a subscriber that can of course be `.unsubscribe()`d. 
+It returns a subscriber that can stop the listeners from receiving updates `mySub.unsubscribe()`. 
+
+````javascript
+
+const nums = new Leaf(1);
+const sub = nums.subscribe((value) => console.log('set to ', value));
+
+nums.next(2);
+const sub2 = num.subscribe((value) => console.log('SUB 2: set to ', value))
+nums.next(3);
+sub.unsubscribe();
+nums.next(4);
+sub2.unsubscribe();
+nums.next(5);
+
+/**
+ * 'set to ', 1
+ * 'set to ', 2
+ * 'SUB 2: set to ', 2
+ * 'set to ', 3
+ * 'SUB 2: set to ', 3
+ * 'SUB 2: set to ', 4
+ */
+
+````
 
 Subscription is the best way to observe changes to a Leaf. 
 
@@ -362,7 +429,7 @@ The second property of Leaf can be an object with any/all/none of these properti
   instances made/passed into `.branch(name, value)`
 * **test** - a function; will be passed each change, as it is asserted; if it returns anything "truthy" (not zero, null, etc),
   will block the updating of a Leaf.
-* **actions** - an object of name/function accessible off the `.$do` object property of your Leaf.
+* **actions** - an object of name/function accessible off the `.do` object property of your Leaf.
 * **branches** - an object of name/branch values(or Leaf instances). Note, even if your Leaf
   is a Map, your Branches can be defined by an object. 
 * **type** - if true, then rejects any values that don't match the type (string, number, etc.)

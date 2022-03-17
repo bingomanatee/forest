@@ -403,7 +403,7 @@ export default class Leaf {
    * 6. _changeDown()
    *        i. _changeFromBranch(this);
    *        ii. inject this updated value into its parent
-   *        iii. parent.next(updated, CHANGE_DOWN) prevents recursive _changeDown
+   *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
    *
    * If there are any errors all changes after the beginning of next() are rolled back.
    *
@@ -858,13 +858,15 @@ export default class Leaf {
 
       try {
         const actionName = `set${ucFirst(key)}`;
-        if (this._$do && actionName in this._$do) {
-          delete this._$do[actionName];
+        if (actionName in this._inferredActions) {
+          delete this._inferredActions[actionName];
         }
       } catch (err) {
         this.bugLog(`cannot delete action for key ${key}`);
       }
     });
+
+    this._makeDo();
 
     const value = this._delKeys(keys);
     this.next(value, CHANGE_ABSOLUTE);
@@ -883,34 +885,66 @@ export default class Leaf {
 
   /* ------------------- Actions --------------------- */
 
-  private _$do: any;
-  get $do(): any {
-    if (!this._$do) {
-      this._$do = {};
-      this.inferActions();
+  private _do: any;
+  get do(): any {
+    if (!this._do) {
+      this._do = {};
     }
-    return this._$do;
+    return this._do;
   }
 
   inferActions() {
     const valKeys = keys(this.value);
-
+    this._inferredActions = {};
     valKeys.forEach(key => {
-      this.addAction(`set${ucFirst(key)}`, (leaf, value) => {
-        return leaf.set(key, value);
-      });
+      this.addAction(
+        `set${ucFirst(key)}`,
+        (leaf, value) => {
+          return leaf.set(key, value);
+        },
+        true,
+        true
+      );
+    });
+    this._makeDo();
+  }
+
+  private _inferredActions: any = null;
+  private _userActions: any = null;
+
+  private _makeDo() {
+    this._do = {};
+    [this._inferredActions, this._userActions].forEach(actionSet => {
+      if (isObj(actionSet)) {
+        Object.assign(this._do, actionSet);
+      }
     });
   }
 
-  addAction(name: string, fn): boolean {
+  addAction(name: string, fn, inferred = false, noBlend = false): boolean {
     try {
-      this.$do[name] = (...args) => this.transact(() => fn(this, ...args));
-      this.bugLog('$do sdvanced to ', this.$do, 'from', name);
+      if (inferred) {
+        if (!this._inferredActions) {
+          this._inferredActions = {};
+        }
+        this._inferredActions[name] = (...args) =>
+          this.transact(() => fn(this, ...args));
+      } else {
+        if (!this._userActions) {
+          this._userActions = {};
+        }
+        this._userActions[name] = (...args) =>
+          this.transact(() => fn(this, ...args));
+      }
+      this.bugLog('$do sdvanced to ', this.do, 'from', name);
       return true;
     } catch (err) {
       console.warn('cannot addAction', name, fn);
+      // @ts-ignore
+      console.warn(err.message);
       return false;
     }
+    if (!noBlend) this._makeDo();
   }
 
   set(name, value: any) {

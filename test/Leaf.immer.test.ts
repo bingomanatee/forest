@@ -79,7 +79,7 @@ describe('LeafImmer', () => {
         pt.delKeys('y');
         expect(pt.value).toEqual({ x: 0, z: 0 });
 
-        expect(() => pt.$do.setY(3)).toThrow(/is not a function/);
+        expect(() => pt.do.setY(3)).toThrow(/is not a function/);
         expect(history).toEqual([
           { x: 0, y: 0, z: 0 },
           { x: 0, z: 0 },
@@ -387,11 +387,11 @@ describe('LeafImmer', () => {
   describe('actions', () => {
     it('should make setters for initial props', () => {
       const point = new Leaf({ x: 0, y: 0, z: 0 }, {});
-      point.$do.setX(3);
+      point.do.setX(3);
 
       expect(point.value).toEqual({ x: 3, y: 0, z: 0 });
 
-      point.$do.setY(4);
+      point.do.setY(4);
 
       expect(point.value).toEqual({ x: 3, y: 4, z: 0 });
     });
@@ -402,9 +402,9 @@ describe('LeafImmer', () => {
         {
           actions: {
             addTo: (leaf, x, y, z) => {
-              leaf.$do.setX(leaf.value.x + x);
-              leaf.$do.setY(leaf.value.y + y);
-              leaf.$do.setZ(leaf.value.z + z);
+              leaf.do.setX(leaf.value.x + x);
+              leaf.do.setY(leaf.value.y + y);
+              leaf.do.setZ(leaf.value.z + z);
             },
             length(leaf) {
               return Math.sqrt(
@@ -414,11 +414,11 @@ describe('LeafImmer', () => {
           },
         }
       );
-      point.$do.addTo(2, 4, 6);
+      point.do.addTo(2, 4, 6);
 
       expect(point.value).toEqual({ x: 2, y: 4, z: 6 });
 
-      expect(Math.round(point.$do.length())).toEqual(7);
+      expect(Math.round(point.do.length())).toEqual(7);
     });
   });
 
@@ -456,11 +456,11 @@ describe('LeafImmer', () => {
             },
             actions: {
               offset(line, x, y) {
-                line.branch('start').$do.setX(line.value.start.x + x);
-                line.branch('start').$do.setY(line.value.start.y + y);
+                line.branch('start').do.setX(line.value.start.x + x);
+                line.branch('start').do.setY(line.value.start.y + y);
 
-                line.branch('end').$do.setX(line.value.end.x + x);
-                line.branch('end').$do.setY(line.value.end.y + y);
+                line.branch('end').do.setX(line.value.end.x + x);
+                line.branch('end').do.setY(line.value.end.y + y);
               },
             },
           }
@@ -488,7 +488,7 @@ describe('LeafImmer', () => {
           },
         ]);
 
-        line.$do.offset(3, 3);
+        line.do.offset(3, 3);
 
         expect(history).toEqual([
           {
@@ -525,13 +525,13 @@ describe('LeafImmer', () => {
     it('should test numbers', () => {
       const typeLeaf = makeLeaf();
 
-      typeLeaf.$do.setNum(3);
+      typeLeaf.do.setNum(3);
       expect(typeLeaf.value.num).toBe(3);
 
-      expect(() => typeLeaf.$do.setNum('2')).toThrow(/type must be number/);
+      expect(() => typeLeaf.do.setNum('2')).toThrow(/type must be number/);
       expect(typeLeaf.value.num).toBe(3);
 
-      typeLeaf.$do.setNum(4);
+      typeLeaf.do.setNum(4);
       expect(typeLeaf.value.num).toBe(4);
     });
 
@@ -539,28 +539,28 @@ describe('LeafImmer', () => {
       const typeLeaf = makeLeaf();
 
       const d = 'a phrase';
-      typeLeaf.$do.setDn(d);
+      typeLeaf.do.setDn(d);
       expect(typeLeaf.value.dn).toBe(d);
 
-      expect(() => typeLeaf.$do.setDn([])).toThrow(/type cannot be array/);
+      expect(() => typeLeaf.do.setDn([])).toThrow(/type cannot be array/);
       expect(typeLeaf.value.dn).toBe(d);
 
-      typeLeaf.$do.setDn(4);
+      typeLeaf.do.setDn(4);
       expect(typeLeaf.value.dn).toBe(4);
     });
 
     it('should test for strings', () => {
       const typeLeaf = makeLeaf();
-      typeLeaf.$do.setStr('beta');
+      typeLeaf.do.setStr('beta');
       expect(typeLeaf.value.str).toBe('beta');
 
       expect(() => {
-        typeLeaf.$do.setStr([]);
+        typeLeaf.do.setStr([]);
       }).toThrow(/type must be string/);
 
       expect(typeLeaf.value.str).toBe('beta');
 
-      typeLeaf.$do.setStr('gamma');
+      typeLeaf.do.setStr('gamma');
       expect(typeLeaf.value.str).toBe('gamma');
     });
   });

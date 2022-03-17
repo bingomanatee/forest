@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "1.0.0",
   "license": "MIT",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -30,16 +30,16 @@
     "singleQuote": true,
     "trailingComma": "es5"
   },
-  "name": "@wonderlandlabs/malt",
+  "name": "@wonderlandlabs/forest",
   "author": "davidedelhart",
-  "module": "dist/malt.esm.js",
+  "module": "dist/forest.esm.js",
   "size-limit": [
     {
-      "path": "dist/malt.cjs.production.min.js",
+      "path": "dist/forest.cjs.production.min.js",
       "limit": "10 KB"
     },
     {
-      "path": "dist/malt.esm.js",
+      "path": "dist/forest.esm.js",
       "limit": "10 KB"
     }
   ],

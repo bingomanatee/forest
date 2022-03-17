@@ -27,9 +27,43 @@ describe('Leaf', () => {
     try {
       numLeaf.next(-4);
     } catch (err2) {
-     //  console.log('error 2:', err2);
+      //  console.log('error 2:', err2);
     }
     // console.log('leaf is still', numLeaf.value);
     numLeaf.next(10);
+  });
+
+  describe('actions', () => {
+    it('should allow for custom setters', () => {
+      const user = new Leaf(
+        {
+          firstName: '',
+          lastName: '',
+          age: 0,
+          gender: '?',
+        },
+        {
+          actions: {
+            setFirstName(leaf, n) {
+              if (typeof n !== 'string')
+                throw new Error('first name must be a string');
+              leaf.set('firstName', n.trim());
+            },
+            setAge(leaf, age) {
+              if (typeof age === 'string') age = Number.parseInt(age, 10);
+              if (Number.isNaN(age)) {
+                throw new Error('age is only a number');
+              }
+              leaf.set('age', age);
+            },
+          },
+        }
+      );
+
+      user.do.setFirstName(' Bob  ');
+      user.do.setAge('45');
+      console.log('user is ', user.value);
+      //   user is  { firstName: 'Bob', lastName: '', age: 45, gender: '?' }
+    });
   });
 });
