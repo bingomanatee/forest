@@ -53,6 +53,7 @@
     "@types/lodash.isnumber": "^3.0.6",
     "emitix": "^2.1.0",
     "immer": "^9.0.12",
+    "lodash.flattendeep": "^4.4.0",
     "lodash.isnumber": "^3.0.3",
     "lodash.sortby": "^4.7.0",
     "rxjs": "^7.5.4"

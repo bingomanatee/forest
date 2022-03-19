@@ -265,3 +265,26 @@ export function testForType({ next, target }): string | null {
   }
   return out;
 }
+
+export function makeNew(type, isInstance = false) {
+  if (isInstance) {
+    return makeNew(detectForm(type));
+  }
+
+  let out: any = null;
+  switch (type) {
+    case FORM_MAP:
+      out = new Map();
+      break;
+
+    case FORM_ARRAY:
+      out = [];
+      break;
+
+    case FORM_OBJECT:
+      return {};
+      break;
+  }
+
+  return out;
+}

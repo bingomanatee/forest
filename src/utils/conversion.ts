@@ -1,4 +1,13 @@
-import { isMap, isObj, isStr, isNum, e, detectForm, isThere } from './tests';
+import {
+  isMap,
+  isObj,
+  isStr,
+  isNum,
+  e,
+  detectForm,
+  isThere,
+  isArr,
+} from './tests';
 import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
 
 export function toMap(m: any, force = false) {
@@ -8,6 +17,10 @@ export function toMap(m: any, force = false) {
   const map = new Map();
   if (isObj(m)) Object.keys(m).forEach(key => map.set(key, m[key]));
   return map;
+}
+
+export function toArr(m) {
+  return isArr(m) ? m : [m];
 }
 
 /**
