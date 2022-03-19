@@ -25,7 +25,12 @@ export default class LeafImmer extends Leaf {
         if (isDraftable(value)) {
           try {
             nextValue = produce(value, draft => draft);
-            this.emit('debug', ['nextValue set to ', nextValue, 'from ', nextValue]);
+            this.emit('debug', [
+              'nextValue set to ',
+              nextValue,
+              'from ',
+              nextValue,
+            ]);
           } catch (err) {
             nextValue = value;
           }
@@ -33,7 +38,12 @@ export default class LeafImmer extends Leaf {
         break;
     }
 
-    this.emit('debug', ['leafImmer set: nextValue = ', nextValue, 'value = ', value]);
+    this.emit('debug', [
+      'leafImmer set: nextValue = ',
+      nextValue,
+      'value = ',
+      value,
+    ]);
     const form = detectForm(nextValue);
     if (!isThere(this.form)) {
       // initialize form to first time value is set.
@@ -60,9 +70,14 @@ export default class LeafImmer extends Leaf {
         }
       }
     }
-    this.emit( 'debug', 
-     [ 'LeafImmer --- >>> setting value from ', this.value, ' to ', updatedValue, 'from ', value]
-    );
+    this.emit('debug', [
+      'LeafImmer --- >>> setting value from ',
+      this.value,
+      ' to ',
+      updatedValue,
+      'from ',
+      value,
+    ]);
     return new Change(value, this, updatedValue);
   }
 

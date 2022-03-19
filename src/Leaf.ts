@@ -38,7 +38,7 @@ const NO_VALUE = Symbol('no value');
 @WithDebug
 export default class Leaf {
   /**
-   *  -------------- constructor ---------- 
+   *  -------------- constructor ----------
    *  */
 
   constructor(value: any, opts: any = {}) {
@@ -65,23 +65,23 @@ export default class Leaf {
     }
 
     this._initialized = true;
-    
   }
 
   /**
-   *  ---------- identity / reflection ------------------ 
+   *  ---------- identity / reflection ------------------
    *  */
+  // region identity
   debug: any;
   _initialized = false;
   get initialized() {
-    return this._initialized
+    return this._initialized;
   }
   name: any;
   type?: symboly;
   form?: symboly;
 
   /* -------------- event ------------- */
-
+  // endregion
   private _selectors?: Map<any, SelectorType> | null;
 
   get selectors(): Map<any, SelectorType> {
@@ -94,7 +94,7 @@ export default class Leaf {
   /**
    *  ------------------- events ----------------------
    *  */
-//region events
+  //region events
   protected _e: EventEmitter<any> = new EventEmitter();
 
   get e() {
@@ -121,16 +121,23 @@ export default class Leaf {
       this.subject.next(this.value);
     }
   }
-  
-//endregion
+
+  //endregion
   /**
    *  ------------------- parent/child, branches ------------------
    *  */
-//region parentChild
+  //region parentChild
   private _branches: Map<any, any> | undefined;
   get branches(): Map<any, any> {
     if (!this._branches) this._branches = new Map();
     return this._branches;
+  }
+
+  beach(fn) {
+    if (!this._branches) {
+      return;
+    }
+    this.branches.forEach(fn);
   }
 
   public _parent: any;
@@ -147,12 +154,15 @@ export default class Leaf {
     if (this.parent) return this.parent.root;
     return this;
   }
-  
+
   addBranches(branches) {
+    if (this.isStopped) {
+      throw e('cannot add branches to stopped leaf', { leaf: this, branches });
+    }
     if (Array.isArray(branches)) {
+      // transport value properties to sub-branches
       branches.forEach(name => {
-        const value = getKey(this._value, name);
-        this.branch(name, value);
+        this.branch(name, getKey(this._value, name));
       });
     } else {
       toMap(branches).forEach((branch, name) => {
@@ -202,25 +212,23 @@ export default class Leaf {
     }
 
     if (value !== NO_VALUE) {
-      // creating a new branch - either injecting a leaf-type branch or creating one with that value. 
+      // creating a new branch - either injecting a leaf-type branch or creating one with that value.
       const branch = value instanceof Leaf ? value : this._branch(value, name);
       branch.config({ name, parent: this });
       this.branches.set(name, branch);
       this.emit('change-from-branch', branch);
     }
-    
+
     if (!this._branches) return undefined;
     return this.branches.get(name);
   }
-  
+
   branchEmit(message, value) {
-   if (this._branches) {
-     this.branches.forEach((branch) => {
-       branch.emit(message, value);
-     })
-   }
+    this.beach(branch => {
+      branch.emit(message, value);
+    });
   }
-// endregion
+  // endregion
   /**
    *  ------------------ version tracking ------------------------
    */
@@ -253,11 +261,9 @@ export default class Leaf {
    */
   _maxVersion() {
     let version = this.version === null ? 0 : this.version;
-    if (this._branches) {
-      this.branches.forEach(branch => {
-        version = Math.max(version, branch._maxVersion());
-      });
-    }
+    this.beach(branch => {
+      version = Math.max(version, branch._maxVersion());
+    });
 
     return version;
   }
@@ -283,11 +289,11 @@ export default class Leaf {
     }
   }
 
-//endregion
+  //endregion
   /**
    * ------------------------ value, history -------------------------------
    */
-//region value
+  //region value
   public _value: any = ABSENT;
 
   /*
@@ -340,11 +346,9 @@ export default class Leaf {
     }
     this._dirty = false;
     this.snapshot(0);
-    if (this._branches) {
-      this.branches.forEach(b => b._flushJournal());
-    }
+    this.beach(b => b._flushJournal());
   }
-//endregion
+  //endregion
 
   /**
    * ----------------- configuration ----------------------
@@ -414,11 +418,11 @@ export default class Leaf {
       });
     }
   }
-//endregion
+  //endregion
   /**
    * -------------------- transactions -------------------
    * */
-    //region trans
+  //region trans
 
   /*
     transactions are global and managed from the root of the tree.
@@ -481,7 +485,8 @@ export default class Leaf {
       this.snapshot(version);
       dirtyLeaves.push(this);
     }
-    if (this._branches) this.branches.forEach((branch) => {
+ 
+    this.beach((branch) => {
       const dirtyBranches = branch.advance(version);
       if (dirtyBranches.length) {
         dirtyLeaves = [...dirtyLeaves, ...dirtyBranches];
@@ -490,7 +495,7 @@ export default class Leaf {
 
     return dirtyLeaves;
   }
-  
+
   get inTransaction() {
     return !!this.transList.length;
   }
@@ -585,7 +590,10 @@ export default class Leaf {
     } else {
       this.emit('debug', {
         n: 2,
-        message: ['----------!!-------------- transaction still active', this.root.transList],
+        message: [
+          '----------!!-------------- transaction still active',
+          this.root.transList,
+        ],
       });
     }
     this.emit('debug', ['end of transaction', token]);
@@ -631,7 +639,7 @@ export default class Leaf {
    * 9. broadcast to any subscribers
    */
 
-//region next
+  //region next
   /**
    * get a map of change objects for each property in value
    * that has been changed by the value from the current value of that branch.
@@ -643,17 +651,16 @@ export default class Leaf {
   _getBranchChanges(value): Map<Leaf, any> {
     const branchChanges = new Map();
 
-    if (this._branches) {
-      this.branches.forEach((branch, name) => {
-        //@TODO: type test now?
-        if (hasKey(value, name, this.form)) {
-          const newValue = getKey(value, name, this.form);
-          if (newValue !== branch.value) {
-            branchChanges.set(branch, newValue);
-          }
+    this.beach((branch, name) => {
+      //@TODO: type test now?
+      if (hasKey(value, name, this.form)) {
+        const newValue = getKey(value, name, this.form);
+        if (newValue !== branch.value) {
+          branchChanges.set(branch, newValue);
         }
-      });
-    }
+      }
+    });
+
     return branchChanges;
   }
   /**
@@ -687,10 +694,10 @@ export default class Leaf {
 
     this.e.emit('debug', ['next:setting ', this.name, 'to', value, direction]);
 
-    this.emit('change-value', {value, direction});
+    this.emit('change-value', { value, direction });
   }
-  
-//endregion
+
+  //endregion
 
   /**
    * ---------------------- subscribe -------------------
@@ -712,11 +719,11 @@ export default class Leaf {
 
     return this.subject.subscribe(listener);
   }
-  //endregion 
+  //endregion
   /**
    *  -------------------- delKeys --------------------
    *  */
-//region delkeys
+  //region delkeys
 
   _delKeys(keys) {
     return delKeys(clone(this.value), keys);
@@ -752,7 +759,7 @@ export default class Leaf {
   //endregion
   /**
    * ----------------------- snapshot, rollback -----------------
-    */
+   */
   //region snapshot
   snapshot(version = 0) {
     this.history.set(version, this.value);
@@ -808,12 +815,12 @@ export default class Leaf {
       });
     }
   }
-//endregion
+  //endregion
 
   /**
    *  ------------------- Actions ---------------------
    *  */
-//region actions
+  // region actions
 
   private _inferredActions: any = null;
   private _userActions: any = null;
@@ -830,21 +837,20 @@ export default class Leaf {
         true
       );
     });
-
-    if (this._branches) {
-      this.branches.forEach((_branch, key) => {
-        if (!valKeys.includes(key)) {
-          this.addAction(
-            `set${ucFirst(key)}`,
-            (leaf, value) => {
-              return leaf.set(key, value);
-            },
-            true,
-            true
-          );
-        }
-      });
-    }
+    
+    this.beach((_branch, key) => {
+      if (!valKeys.includes(key)) {
+        this.addAction(
+          `set${ucFirst(key)}`,
+          (leaf, value) => {
+            return leaf.set(key, value);
+          },
+          true,
+          true
+        );
+      }
+    });
+  
     this._makeDo();
   }
 
@@ -947,20 +953,21 @@ export default class Leaf {
       }
     });
   }
-  //endregion
+
+  // endregion
 
   /**
    * ---------------------------- inspection, misc.
    */
 
-  //region misc
+  // region inspection
 
   toJSON(network = false) {
     if (network && this.branches.size) {
       const out = this.toJSON();
       if (this._branches) {
         out.branches = [];
-        this.branches.forEach(b => {
+        this.beach(b => {
           out.branches.push(b.toJSON(true));
         });
       }
@@ -1019,15 +1026,17 @@ export default class Leaf {
   }
 
   complete() {
+
     if (this._branches) {
-      this.branches.forEach(branch => {
+      this.beach(branch => {
         branch.complete();
-      });
-    }
-    this.branches.clear();
+      }); 
+      this.branches.clear();
+    } 
+    
     if (this._subject) this._subject.complete();
     this._isStopped = true;
   }
 
-  //endregion
+  // endregion
 }
