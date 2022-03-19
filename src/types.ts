@@ -6,8 +6,12 @@ export type LeafType = {
   debug: boolean;
   isStopped: boolean;
   toJSON: Function;
+  isRoot: boolean;
   root: LeafType;
   parent: LeafType | null;
+  next: (any, direction?: symboly) => void;
+  initialized: boolean;
+  emit: (name: string, value?: any) => void;
 };
 
 export type SelectorType = NonNullable<{

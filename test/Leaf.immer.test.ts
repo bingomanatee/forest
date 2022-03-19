@@ -142,7 +142,7 @@ describe('LeafImmer', () => {
         expect(point.branch('z').version).toBe(1);
       });
 
-      describe('.rollbackTo', () => {
+      describe('(event) rollback', () => {
         it('should roll back to a snapshot', () => {
           const point = new Leaf(
             {},
@@ -157,7 +157,7 @@ describe('LeafImmer', () => {
 
           point.branch('x').next(3);
           point.branch('y').next(6);
-          point.rollbackTo(1);
+          point.emit('rollback', 1);
 
           expect(point.value).toEqual({ x: 3, y: 0, z: 0 });
           expect(point.version).toBe(1);
@@ -179,7 +179,7 @@ describe('LeafImmer', () => {
 
           point.branch('x').next(3);
           point.branch('y').next(6);
-          point.rollbackTo(1);
+          point.emit('rollback', 1);
           point.branch('z').next(9);
 
           expect(point.value).toEqual({ x: 3, y: 0, z: 9 });
@@ -259,7 +259,7 @@ describe('LeafImmer', () => {
             );
             box.branch('topLeft.x').next(3);
             box.branch('topLeft.y').next(6);
-            box.rollbackTo(1);
+            box.emit('rollback', 1);
             expect(box.value).toEqual({
               topLeft: p(3, 1, 0),
               topRight: p(1, 1, 0),
@@ -285,7 +285,7 @@ describe('LeafImmer', () => {
 
             box.branch('topLeft.x').next(3);
             box.branch('topLeft.y').next(6);
-            box.rollbackTo(1);
+            box.emit('rollback', 1);
             box.branch('topLeft.z').next(9);
 
             expect(box.value).toEqual({

@@ -12,13 +12,10 @@ import {
   getKey,
   hasKey,
   isArr,
-  isCompound,
   isFn,
   isObj,
   isThere,
   keys,
-  makeValue,
-  setKey,
   testForType,
   toMap,
   ucFirst,
@@ -26,8 +23,6 @@ import {
 import {
   ABSENT,
   CHANGE_ABSOLUTE,
-  CHANGE_DOWN,
-  CHANGE_UP,
   FORM_ARRAY,
   FORM_MAP,
   FORM_OBJECT,
@@ -35,32 +30,24 @@ import {
 } from './constants';
 import { SelectorType, symboly } from './types';
 import WithDebug from './Leaf/WithDebug';
+import listenForChange from './utils/listenForChange';
 
 const NO_VALUE = Symbol('no value');
 
 // @ts-ignore
 @WithDebug
 export default class Leaf {
-  /* ---------- identity / config ------------------ */
-  debug: any;
-  _initialized = false;
-  name: any;
-  type?: symboly;
-  form?: symboly;
-
-  /* -------------- selector ---------- */
-  public _dirty = false;
-  private _inferredActions: any = null;
-  private _userActions: any = null;
+  /**
+   *  -------------- constructor ---------- 
+   *  */
 
   constructor(value: any, opts: any = {}) {
-    this._e = new EventEmitter();
     this.debug = !!opts.debug;
+    listenForChange(this);
     this.value = value;
     this._transList = [];
     this.config(opts);
 
-    this._listenForUpdated();
     this.version = 0;
     this.snapshot(0);
     if (!this.root._initialized) {
@@ -78,7 +65,20 @@ export default class Leaf {
     }
 
     this._initialized = true;
+    
   }
+
+  /**
+   *  ---------- identity / reflection ------------------ 
+   *  */
+  debug: any;
+  _initialized = false;
+  get initialized() {
+    return this._initialized
+  }
+  name: any;
+  type?: symboly;
+  form?: symboly;
 
   /* -------------- event ------------- */
 
@@ -91,12 +91,42 @@ export default class Leaf {
     return this._selectors;
   }
 
-  protected _e: EventEmitter<any>;
+  /**
+   *  ------------------- events ----------------------
+   *  */
+//region events
+  protected _e: EventEmitter<any> = new EventEmitter();
 
   get e() {
     return this._e;
   }
 
+  protected on(event: string, listener: (arg0: any) => void) {
+    const target = this;
+    this.e.on(event, value => {
+      if (target.isStopped) {
+        // don't listen
+      } else {
+        listener(value);
+      }
+    });
+  }
+
+  emit(message, value) {
+    this.e.emit(message, value);
+  }
+
+  broadcast() {
+    if (!this.inTransaction && !this.isStopped) {
+      this.subject.next(this.value);
+    }
+  }
+  
+//endregion
+  /**
+   *  ------------------- parent/child, branches ------------------
+   *  */
+//region parentChild
   private _branches: Map<any, any> | undefined;
   get branches(): Map<any, any> {
     if (!this._branches) this._branches = new Map();
@@ -109,303 +139,15 @@ export default class Leaf {
     return this._parent;
   }
 
-  /*
-    the highest version that has ever been used;
-    should be true for the entire tree,
-    as changes to any branch version cascade to the parent,
-    as do get attempts.
-    highestVersion does not decline in rollback.
-    */
-  private _highestVersion = 0;
-
-  get highestVersion(): number {
-    if (this.parent) return this.parent.highestVersion;
-    return this._highestVersion;
-  }
-
-  set highestVersion(value: number) {
-    if (value > this._highestVersion) {
-      this._highestVersion = value;
-    }
-    if (this.parent) {
-      this.parent.highestVersion = value;
-    }
-  }
-
-  get maxVersion() {
-    return this.root._maxVersion();
-  }
-
-  private _version: number | null = 0;
-
-  get version(): number | null {
-    return this._version;
-  }
-
-  set version(value: number | null) {
-    if (!this.root._initialized) {
-      this._version = 0;
-      return;
-    }
-    this._version = value;
-    if (value !== null && value > this.root.highestVersion) {
-      this.root.highestVersion = value;
-    }
+  get isRoot() {
+    return !this.parent;
   }
 
   get root(): Leaf {
     if (this.parent) return this.parent.root;
     return this;
   }
-
-  public _value: any = ABSENT;
-
-  /*
-  the current version of this leaf. A leaf can have children with lower version numbers than it,
-  but a leaf should never have children with higher versions than it.
-  note - version is set to null for transient values inside a transact(); the outermost transact
-  will advance all dirty data to the next version, and rollback will purge it back to a known prior one.
-*/
-
-  get value(): any {
-    return this._value;
-  }
-
-  /**
-   * updates the value of this form. There may be a brief inconsistency as
-   * the values of the update are sent out to the branches which can reinterpret them.
-   * @param value
-   */
-  set value(value: any) {
-    if (this._value === value) return;
-    if (!this.form) this.form = detectForm(value);
-    this._value = value;
-    if (this._initialized) this._dirty = true;
-  }
-
-  get historyString() {
-    let out = '';
-    this.history.forEach((value, key) => {
-      out += `${key} -> ${JSON.stringify(value)}, `;
-    });
-
-    return out;
-  }
-
-  private _transSubject: SubjectLike<Set<any>> | null = null;
-
-  /**
-   * a broadcaster of the current state;
-   */
-  get transSubject() {
-    if (this.parent) {
-      return this.parent.transSubject;
-    }
-    if (!this._transSubject) {
-      this._transSubject = new BehaviorSubject(new Set(this.transList));
-    }
-
-    return this._transSubject;
-  }
-
-  /**
-   * transList points to the root's private _transList property.
-   * @param list
-   */
-
-  private _transList: any[];
-
-  get transList() {
-    return this.root._transList;
-  }
-
-  set transList(list) {
-    if (this.isRoot) {
-      this.emit('debug', { n: 1, message: ['---->>> translist = ', list] });
-      this._transList = list;
-      this.transSubject.next(new Set(list));
-    } else this.root.transList = list;
-  }
-
-  get inTransaction() {
-    return !!this.transList.length;
-  }
-
-  private _subject: SubjectLike<any> | null = null;
-
-  get subject(): SubjectLike<any> {
-    if (!this._subject) {
-      this._subject = new BehaviorSubject(this.value);
-    }
-    return this._subject;
-  }
-
-  private _history?: Map<number, any>;
-
-  get history() {
-    if (!this._history) this._history = new Map();
-    return this._history;
-  }
-
-  /* ---------------------------- next ---------------------------- */
-
-  /**
-   * `next` submits a new value. In this order:
-   * note: every time you update value its leaf is marked as 'dirty"
-   * to flag it as having been changed for step 4.
-   *
-   * - the short version is:
-   * - update values up and down the tree,
-   *     flagging changes as dirty and validating as we go
-   *
-   * next() is transactional wrapped, so in the absence of errors it will:
-   * - advance the version of dirty values
-   * - journal the changes
-   * - broadcast to any subscribers
-   *
-   * the long version: next
-   * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
-   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange) which executes the following:
-   *    (in a transaction)
-   * 3. set the value passed in; merges any structures(objects/maps) from previous values.
-   * 4. creates a rootChange
-   *       emit('change', rootChange) -- triggers any tests which may throw
-   * 5. _changeUp(value) -- update changed fields to branches,
-   *       recursively changeUp for any subProps
-   * 6. _changeDown()
-   *        i. _changeFromBranch(this);
-   *        ii. inject this updated value into its parent
-   *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
-   *
-   * If there are any errors all changes after the beginning of next() are rolled back.
-   *
-   * otherwise, at the close of any outermost transactions where changes were made:
-   *
-   * 7. advance the version of dirty values
-   * 8. journal the changes
-   * 9. broadcast to any subscribers
-   */
-
-  get isRoot() {
-    return !this.parent;
-  }
-
-  private _do: any;
-
-  get do(): any {
-    if (!this._do) {
-      this._do = {};
-    }
-    return this._do;
-  }
-
-  public _isStopped = false;
-
-  get isStopped() {
-    return this._isStopped;
-  }
-
-  config(opts: any = {}) {
-    const {
-      parent = null,
-      branches = null,
-      test,
-      name,
-      actions,
-      type,
-      any,
-      selectors,
-    } = opts;
-    this._parent = parent;
-
-    this.name = name;
-    if (!this.name && !this.parent) {
-      this.name = '[ROOT]';
-    }
-
-    if (branches) this.addBranches(branches);
-    if (any) {
-      this.type = TYPE_ANY;
-    } else if (type) {
-      this.type = type === true ? detectType(this.value) : type;
-      this.emit('debug', {
-        n: 2,
-        message: ['type is ', type, 'this.type set to ', this.type],
-      });
-      this.addTest(testForType);
-    }
-    if (typeof test === 'function') this.addTest(test);
-
-    if (isObj(actions)) {
-      Object.keys(actions).forEach(key => {
-        const fn = actions[key];
-        if (isFn(fn)) {
-          this.addAction(key, fn);
-        } else {
-          console.warn('bad action value for ', key, ', value must be fn', fn);
-        }
-      });
-    }
-
-    if (isThere(selectors)) {
-      toMap(selectors).forEach((fn, name) => {
-        this.addSelector(name, fn);
-      });
-    }
-  }
-
-  addSelector(name, selector) {
-    this.selectors.set(name, { selector, value: ABSENT, valid: false });
-    this._computeSelector(name);
-  }
-
-  _computeSelector(name) {
-    if (this._selectors && this.selectors.has(name)) {
-      // @ts-ignore
-      const { selector } = this.selectors.get(name);
-      let valid = false;
-      let value: any = ABSENT;
-
-      try {
-        value = isFn(selector)
-          ? selector(this.value, this)
-          : this.do[selector]();
-        valid = true;
-      } catch (err) {
-        value = err;
-      }
-
-      this.selectors.set(name, { selector, value, valid });
-    }
-  }
-
-  emit(message, value) {
-    this.e.emit(message, value);
-  }
-
-  /* -------------------- transactions ------------------- */
-
-  /*
-    transactions are global and managed from the root of the tree.
-    They are stored in an array and tracked in a BehaviorSubject
-    that stores a set from that array.
-
-    The nature of what token is stored in the array is not really important
-    as long as its referentially unique; as such, symbols make good
-    transaction tokens.
-     */
-
-  _flushJournal() {
-    this._version = 0;
-    this._highestVersion = 0;
-    if (this._history) {
-      this.history.clear();
-    }
-    this._dirty = false;
-    this.snapshot(0);
-    this.branches.forEach(b => b._flushJournal());
-  }
-
+  
   addBranches(branches) {
     if (Array.isArray(branches)) {
       branches.forEach(name => {
@@ -460,12 +202,50 @@ export default class Leaf {
     }
 
     if (value !== NO_VALUE) {
+      // creating a new branch - either injecting a leaf-type branch or creating one with that value. 
       const branch = value instanceof Leaf ? value : this._branch(value, name);
       branch.config({ name, parent: this });
       this.branches.set(name, branch);
-      branch._changeDown();
+      this.emit('change-from-branch', branch);
     }
+    
+    if (!this._branches) return undefined;
     return this.branches.get(name);
+  }
+  
+  branchEmit(message, value) {
+   if (this._branches) {
+     this.branches.forEach((branch) => {
+       branch.emit(message, value);
+     })
+   }
+  }
+// endregion
+  /**
+   *  ------------------ version tracking ------------------------
+   */
+  //region version
+  /*
+    the highest version that has ever been used;
+    should be true for the entire tree,
+    as changes to any branch version cascade to the parent,
+    as do get attempts.
+    highestVersion does not decline in rollback.
+    */
+  private _highestVersion = 0;
+
+  get highestVersion(): number {
+    if (this.parent) return this.parent.highestVersion;
+    return this._highestVersion;
+  }
+
+  set highestVersion(value: number) {
+    if (value > this._highestVersion) {
+      this._highestVersion = value;
+    }
+    if (this.parent) {
+      this.parent.highestVersion = value;
+    }
   }
 
   /**
@@ -482,6 +262,95 @@ export default class Leaf {
     return version;
   }
 
+  get maxVersion() {
+    return this.root._maxVersion();
+  }
+
+  private _version: number | null = 0;
+
+  get version(): number | null {
+    return this._version;
+  }
+
+  set version(value: number | null) {
+    if (!this.root._initialized) {
+      this._version = 0;
+      return;
+    }
+    this._version = value;
+    if (value !== null && value > this.root.highestVersion) {
+      this.root.highestVersion = value;
+    }
+  }
+
+//endregion
+  /**
+   * ------------------------ value, history -------------------------------
+   */
+//region value
+  public _value: any = ABSENT;
+
+  /*
+  value is the current version of this leaf.
+  A leaf can have children with lower version numbers than it,
+  but a leaf should never have children with higher versions than it.
+  note - version is set to null for transient values inside a transact();
+   the outermost transact  will advance all dirty data to the next version,
+   and rollback will purge it back to a known prior one.
+*/
+
+  public _dirty = false;
+
+  get value(): any {
+    return this._value;
+  }
+
+  /**
+   * updates the value of this form. There may be a brief inconsistency as
+   * the values of the update are sent out to the branches which can reinterpret them.
+   * @param value
+   */
+  set value(value: any) {
+    if (this._value === value) return;
+    if (!this.form) this.form = detectForm(value);
+    this._value = value;
+    if (this._initialized) this._dirty = true;
+  }
+
+  get historyString() {
+    let out = '';
+    this.history.forEach((value, key) => {
+      out += `${key} -> ${JSON.stringify(value)}, `;
+    });
+
+    return out;
+  }
+  private _history?: Map<number, any>;
+
+  get history() {
+    if (!this._history) this._history = new Map();
+    return this._history;
+  }
+
+  _flushJournal() {
+    this._version = 0;
+    this._highestVersion = 0;
+    if (this._history) {
+      this.history.clear();
+    }
+    this._dirty = false;
+    this.snapshot(0);
+    if (this._branches) {
+      this.branches.forEach(b => b._flushJournal());
+    }
+  }
+//endregion
+
+  /**
+   * ----------------- configuration ----------------------
+   */
+
+  //region config
   addTest(test: (any) => any) {
     this.on('change', (change: Change) => {
       try {
@@ -497,190 +366,103 @@ export default class Leaf {
     });
   }
 
-  toJSON(network = false) {
-    if (network && this.branches.size) {
-      const out = this.toJSON();
-      out.branches = [];
-      this.branches.forEach(b => {
-        out.branches.push(b.toJSON(true));
-      });
-      return out;
+  config(opts: any = {}) {
+    const {
+      parent = null,
+      branches = null,
+      test,
+      name,
+      actions,
+      type,
+      any,
+      selectors,
+    } = opts;
+    this._parent = parent;
+
+    this.name = name;
+    if (!this.name && !this.parent) {
+      this.name = '[ROOT]';
     }
 
-    const out: any = {
-      name: this.name,
-      value: this.value,
-      version: this.version,
-      history: this.historyString,
-    };
-    if (this.type) {
-      out.type = this.type.toString();
-    }
-    if (this._dirty) {
-      // @ts-ignore
-      out.dirty = true;
-    }
-    if (!this.parent || !network) {
-      // @ts-ignore
-      out.highestVersion = this.highestVersion;
-    }
-    return out;
-  }
-
-  /**
-   * get a map of change objects for each property in value
-   * that has been changed by the value from the current value of that branch.
-   *
-   * If there are no branches, or none of the branch fields have been changed,
-   * this method will return an empty Map.
-   * @param value
-   */
-  _getBranchChanges(value): Map<Leaf, any> {
-    const branchChanges = new Map();
-
-    if (this._branches) {
-      this.branches.forEach((branch, name) => {
-        //@TODO: type test now?
-        if (hasKey(value, name, this.form)) {
-          const newValue = getKey(value, name, this.form);
-          if (newValue !== branch.value) {
-            branchChanges.set(branch, newValue);
-          }
-        }
-      });
-    }
-    return branchChanges;
-  }
-
-  /**
-   * insures that the value is the same type as the leaf's current value
-   * @param value
-   */
-  _checkForm(value) {
-    if (this.type === TYPE_ANY || this.form === TYPE_ANY) return;
-    const valueType = detectForm(value);
-    if (valueType !== this.form) {
-      throw e(`incorrect form for leaf ${this.name || ''}`, {
-        valueType,
-        branchType: this.form,
-        nextValue: value,
-      });
-    }
-  }
-
-  /**
-   * breaks any fields that affect sub-branches
-   * and updates them
-   * @param value
-   */
-  _changeUp(value) {
-    const branchMap = this._getBranchChanges(value);
-    branchMap.forEach((newValue, branch) => {
-      branch.next(newValue); // can throw;
-    });
-  }
-
-  _changeFromBranch(branch) {
-    if (branch.name && this.branch(branch.name) === branch) {
-      const value = clone(this.value);
-      setKey(value, branch.name, branch.value, this.form);
+    if (branches) this.addBranches(branches);
+    if (any) {
+      this.type = TYPE_ANY;
+    } else if (type) {
+      this.type = type === true ? detectType(this.value) : type;
       this.emit('debug', {
         n: 2,
-        message: ['--- >>>>>>>>> changing from branch ', branch.name],
+        message: ['type is ', type, 'this.type set to ', this.type],
       });
-      this.next(value, CHANGE_DOWN);
+      this.addTest(testForType);
+    }
+    if (typeof test === 'function') this.addTest(test);
+
+    if (isObj(actions)) {
+      Object.keys(actions).forEach(key => {
+        const fn = actions[key];
+        if (isFn(fn)) {
+          this.addAction(key, fn);
+        } else {
+          console.warn('bad action value for ', key, ', value must be fn', fn);
+        }
+      });
+    }
+
+    if (isThere(selectors)) {
+      toMap(selectors).forEach((fn, name) => {
+        this.addSelector(name, fn);
+      });
     }
   }
+//endregion
+  /**
+   * -------------------- transactions -------------------
+   * */
+    //region trans
 
-  _changeDown() {
+  /*
+    transactions are global and managed from the root of the tree.
+    They are stored in an array and tracked in a BehaviorSubject
+    that stores a set from that array.
+
+    The nature of what token is stored in the array is not really important
+    as long as its referentially unique; as such, symbols make good
+    transaction tokens.
+     */
+
+  private _transSubject: SubjectLike<Set<any>> | null = null;
+
+  /**
+   * a broadcaster of the current state;
+   */
+  get transSubject() {
     if (this.parent) {
-      this.parent._changeFromBranch(this);
+      return this.parent.transSubject;
     }
-  }
-
-  _makeChange(value, direction) {
-    let updatedValue = value;
-
-    if (
-      direction !== CHANGE_ABSOLUTE &&
-      this._initialized &&
-      isCompound(this.form)
-    ) {
-      try {
-        updatedValue = makeValue(this.value, value);
-      } catch (err) {
-        updatedValue = value;
-      }
+    if (!this._transSubject) {
+      this._transSubject = new BehaviorSubject(new Set(this.transList));
     }
-    this.emit('debug', [
-      'Leaf --- >>> setting value from ',
-      this.value,
-      ' to ',
-      updatedValue,
-      'from ',
-      value,
-    ]);
-    return new Change(value, this, updatedValue);
-  }
 
-  _changeValue(value, direction: symboly = ABSENT) {
-    this.transact(() => {
-      const rootChange = this._makeChange(value, direction);
-      if (direction === CHANGE_ABSOLUTE) {
-        direction = ABSENT;
-      }
-      if (
-        !(
-          this.version !== null &&
-          this._history &&
-          this.history.get(this.version) === this.value
-        )
-      ) {
-        this.snapshot();
-      }
-
-      this.value = rootChange.next;
-      this.version = null;
-      try {
-        rootChange.target.emit('change', rootChange);
-        if (rootChange.error) throw rootChange.error;
-        if (direction !== CHANGE_DOWN) {
-          this._changeUp(value);
-        }
-        if (direction !== CHANGE_UP) {
-          this._changeDown();
-        }
-      } catch (err) {
-        if (!rootChange.isStopped) {
-          rootChange.error = err;
-        }
-        throw err;
-      }
-      rootChange.complete();
-    });
+    return this._transSubject;
   }
 
   /**
-   * updates the value of this branch.
-   * @param value
-   * @param direction
+   * transList points to the root's private _transList property.
+   * @param list
    */
-  next(value: any, direction: symboly = ABSENT) {
-    if (this.isStopped) {
-      throw e('cannot next() a stopped Leaf', {
-        value,
-        target: this,
-      });
-    }
 
-    this.e.emit('next:setting ', this.name, 'to', value, direction);
+  private _transList: any[];
 
-    if (this.root._initialized && !this.type) {
-      // if type is present, skip checkForm - there is a test for type in tests
-      this._checkForm(value);
-    }
+  get transList() {
+    return this.root._transList;
+  }
 
-    this._changeValue(value, direction);
+  set transList(list) {
+    if (this.isRoot) {
+      this.emit('debug', { n: 1, message: ['---->>> translist = ', list] });
+      this._transList = list;
+      this.transSubject.next(new Set(list));
+    } else this.root.transList = list;
   }
 
   /**
@@ -699,7 +481,7 @@ export default class Leaf {
       this.snapshot(version);
       dirtyLeaves.push(this);
     }
-    this.branches.forEach(branch => {
+    if (this._branches) this.branches.forEach((branch) => {
       const dirtyBranches = branch.advance(version);
       if (dirtyBranches.length) {
         dirtyLeaves = [...dirtyLeaves, ...dirtyBranches];
@@ -708,7 +490,10 @@ export default class Leaf {
 
     return dirtyLeaves;
   }
-
+  
+  get inTransaction() {
+    return !!this.transList.length;
+  }
   /**
    * token is an arbitrary object that is referentially unique. An object, Symbol. Not a scalar (string/number).
    * The significant trait of token is that when you popTrans (remove it from the trans collection,
@@ -779,7 +564,7 @@ export default class Leaf {
     } catch (err) {
       this.popTrans(token);
       this.emit('debug', ['---- error in transaction: ', err]);
-      if (startMax !== null) this.rollbackTo(startMax);
+      if (startMax !== null) this.root.emit('rollback', startMax);
       throw e(err, { leaf: this });
     }
     if (!this.inTransaction) {
@@ -806,6 +591,119 @@ export default class Leaf {
     this.emit('debug', ['end of transaction', token]);
     return out;
   }
+  //endregion
+
+  /**
+   * ---------------------------- next ----------------------------
+   * `next` submits a new value. In this order:
+   * note: every time you update value its leaf is marked as 'dirty"
+   * to flag it as having been changed for step 4.
+   *
+   * - the short version is:
+   * - update values up and down the tree,
+   *     flagging changes as dirty and validating as we go
+   *
+   * next() is transactional wrapped, so in the absence of errors it will:
+   * - advance the version of dirty values
+   * - journal the changes
+   * - broadcast to any subscribers
+   *
+   * the long version: next
+   * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
+   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange) which executes the following:
+   *    (in a transaction)
+   * 3. set the value passed in; merges any structures(objects/maps) from previous values.
+   * 4. creates a rootChange
+   *       emit('change', rootChange) -- triggers any tests which may throw
+   * 5. _changeUp(value) -- update changed fields to branches,
+   *       recursively changeUp for any subProps
+   * 6. _changeDown()
+   *        i. _changeFromBranch(this);
+   *        ii. inject this updated value into its parent
+   *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
+   *
+   * If there are any errors all changes after the beginning of next() are rolled back.
+   *
+   * otherwise, at the close of any outermost transactions where changes were made:
+   *
+   * 7. advance the version of dirty values
+   * 8. journal the changes
+   * 9. broadcast to any subscribers
+   */
+
+//region next
+  /**
+   * get a map of change objects for each property in value
+   * that has been changed by the value from the current value of that branch.
+   *
+   * If there are no branches, or none of the branch fields have been changed,
+   * this method will return an empty Map.
+   * @param value
+   */
+  _getBranchChanges(value): Map<Leaf, any> {
+    const branchChanges = new Map();
+
+    if (this._branches) {
+      this.branches.forEach((branch, name) => {
+        //@TODO: type test now?
+        if (hasKey(value, name, this.form)) {
+          const newValue = getKey(value, name, this.form);
+          if (newValue !== branch.value) {
+            branchChanges.set(branch, newValue);
+          }
+        }
+      });
+    }
+    return branchChanges;
+  }
+  /**
+   * insures that the value is the same type as the leaf's current value
+   * @param value
+   */
+  _checkForm(value) {
+    if (this.type === TYPE_ANY || this.form === TYPE_ANY) return;
+    const valueType = detectForm(value);
+    if (valueType !== this.form) {
+      throw e(`incorrect form for leaf ${this.name || ''}`, {
+        valueType,
+        branchType: this.form,
+        nextValue: value,
+      });
+    }
+  }
+
+  /**
+   * updates the value of this branch.
+   * @param value
+   * @param direction
+   */
+  next(value: any, direction: symboly = ABSENT) {
+    if (this.isStopped) {
+      throw e('cannot next() a stopped Leaf', {
+        value,
+        target: this,
+      });
+    }
+
+    this.e.emit('debug', ['next:setting ', this.name, 'to', value, direction]);
+
+    this.emit('change-value', {value, direction});
+  }
+  
+//endregion
+
+  /**
+   * ---------------------- subscribe -------------------
+   */
+  //region subscribe
+  private _subject: SubjectLike<any> | null = null;
+
+  get subject(): SubjectLike<any> {
+    if (!this._subject) {
+      this._subject = new BehaviorSubject(this.value);
+    }
+    return this._subject;
+  }
 
   subscribe(listener: any) {
     if (this.isStopped) {
@@ -814,13 +712,48 @@ export default class Leaf {
 
     return this.subject.subscribe(listener);
   }
+  //endregion 
+  /**
+   *  -------------------- delKeys --------------------
+   *  */
+//region delkeys
 
-  broadcast() {
-    this.e.emit('updated', this);
+  _delKeys(keys) {
+    return delKeys(clone(this.value), keys);
   }
 
-  /* -------------------- delKeys -------------------- */
+  delKeys(...keys) {
+    if (isArr(keys[0])) {
+      return this.delKeys(...keys[0]);
+    }
+    if (!keys.length) return;
 
+    keys.forEach(key => {
+      if (this._branches && this.branches.has(key)) {
+        this.branches.get(key).complete();
+        this.branches.delete(key);
+      }
+
+      try {
+        const actionName = `set${ucFirst(key)}`;
+        if (actionName in this._inferredActions) {
+          delete this._inferredActions[actionName];
+        }
+      } catch (err) {
+        this.emit('debug', [`cannot delete action for key ${key}`, err]);
+      }
+    });
+
+    this._makeDo();
+
+    const value = this._delKeys(keys);
+    this.next(value, CHANGE_ABSOLUTE);
+  }
+  //endregion
+  /**
+   * ----------------------- snapshot, rollback -----------------
+    */
+  //region snapshot
   snapshot(version = 0) {
     this.history.set(version, this.value);
   }
@@ -875,95 +808,15 @@ export default class Leaf {
       });
     }
   }
-
-  /* ------------------- Actions --------------------- */
+//endregion
 
   /**
-   * resets all branches by resetting their value to the first one
-   * whose version is <= the target.
-   *
-   * @param version {number}
-   * @param rollingForward {boolean}
-   */
-  rollbackTo(version: number, rollingForward = false) {
-    if (!rollingForward) {
-      this.root.rollbackTo(version, true);
-      return;
-    }
+   *  ------------------- Actions ---------------------
+   *  */
+//region actions
 
-    // either  at parent, or rolling forward from parent
-
-    if (this._dirty || this.version === null || this.version > version) {
-      // at this point we do have a value that needs to be redacted
-
-      const snap = this._getSnap(version);
-
-      if (snap !== null) {
-        this._value = snap.value;
-        this._version = snap.version;
-      }
-      this._purgeHistoryAfter(version);
-    }
-
-    this.branches.forEach(branch => {
-      branch.rollbackTo(version, true);
-    });
-  }
-
-  _listenForUpdated() {
-    this.on('updated', (target: Leaf) => {
-      if (!target.inTransaction) {
-        this.subject.next(this.value);
-        this.emit('debug', 'broadcasting');
-      } else {
-        this.emit('debug', { n: 2, message: 'skipping updated' });
-      }
-    });
-  }
-
-  _delKeys(keys) {
-    return delKeys(clone(this.value), keys);
-  }
-
-  delKeys(...keys) {
-    if (isArr(keys[0])) {
-      return this.delKeys(...keys[0]);
-    }
-    if (!keys.length) return;
-
-    keys.forEach(key => {
-      if (this._branches && this.branches.has(key)) {
-        this.branches.get(key).complete();
-        this.branches.delete(key);
-      }
-
-      try {
-        const actionName = `set${ucFirst(key)}`;
-        if (actionName in this._inferredActions) {
-          delete this._inferredActions[actionName];
-        }
-      } catch (err) {
-        this.emit('debug', [`cannot delete action for key ${key}`, err]);
-      }
-    });
-
-    this._makeDo();
-
-    const value = this._delKeys(keys);
-    this.next(value, CHANGE_ABSOLUTE);
-  }
-
-  complete() {
-    if (this._branches) {
-      this.branches.forEach(branch => {
-        branch.complete();
-      });
-    }
-    this.branches.clear();
-    if (this._subject) this._subject.complete();
-    this._isStopped = true;
-  }
-
+  private _inferredActions: any = null;
+  private _userActions: any = null;
   inferActions() {
     const valKeys = keys(this.value);
     this._inferredActions = {};
@@ -1077,16 +930,13 @@ export default class Leaf {
     );
   }
 
-  protected on(event: string, listener: (arg0: any) => void) {
-    this.e.on(event, value => {
-      if (value instanceof Change && value.target.isStopped) {
-        // don't listen
-      } else if (value instanceof Leaf && value.isStopped) {
-        // don't listen
-      } else {
-        listener(value);
-      }
-    });
+  private _do: any;
+
+  get do(): any {
+    if (!this._do) {
+      this._do = {};
+    }
+    return this._do;
   }
 
   private _makeDo() {
@@ -1097,4 +947,87 @@ export default class Leaf {
       }
     });
   }
+  //endregion
+
+  /**
+   * ---------------------------- inspection, misc.
+   */
+
+  //region misc
+
+  toJSON(network = false) {
+    if (network && this.branches.size) {
+      const out = this.toJSON();
+      if (this._branches) {
+        out.branches = [];
+        this.branches.forEach(b => {
+          out.branches.push(b.toJSON(true));
+        });
+      }
+      return out;
+    }
+
+    const out: any = {
+      name: this.name,
+      value: this.value,
+      version: this.version,
+      history: this.historyString,
+    };
+    if (this.type) {
+      out.type = this.type.toString();
+    }
+    if (this._dirty) {
+      // @ts-ignore
+      out.dirty = true;
+    }
+    if (!this.parent || !network) {
+      // @ts-ignore
+      out.highestVersion = this.highestVersion;
+    }
+    return out;
+  }
+
+  public _isStopped = false;
+
+  get isStopped() {
+    return this._isStopped;
+  }
+
+  addSelector(name, selector) {
+    this.selectors.set(name, { selector, value: ABSENT, valid: false });
+    this._computeSelector(name);
+  }
+
+  _computeSelector(name) {
+    if (this._selectors && this.selectors.has(name)) {
+      // @ts-ignore
+      const { selector } = this.selectors.get(name);
+      let valid = false;
+      let value: any = ABSENT;
+
+      try {
+        value = isFn(selector)
+          ? selector(this.value, this)
+          : this.do[selector]();
+        valid = true;
+      } catch (err) {
+        value = err;
+      }
+
+      this.selectors.set(name, { selector, value, valid });
+    }
+  }
+
+  complete() {
+    if (this._branches) {
+      this.branches.forEach(branch => {
+        branch.complete();
+      });
+    }
+    this.branches.clear();
+    if (this._subject) this._subject.complete();
+    this._isStopped = true;
+  }
+
+  //endregion
 }

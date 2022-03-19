@@ -1,4 +1,6 @@
-import { ABSENT } from './constants';
+import { ABSENT, CHANGE_ABSOLUTE } from './constants';
+import { LeafType } from './types';
+import { isCompound, makeValue } from './utils';
 
 export class Change {
   constructor(value: any, target: any, next: any = ABSENT) {
@@ -41,5 +43,30 @@ export class Change {
 
   get isStopped() {
     return !!(this._error || this.status !== 'live');
+  }
+  
+  public static create(target: LeafType, value, direction) {
+      let updatedValue = value;
+
+      if (
+        direction !== CHANGE_ABSOLUTE &&
+        target.initialized &&
+        isCompound(target.form)
+      ) {
+        try {
+          updatedValue = makeValue(target.value, value);
+        } catch (err) {
+          updatedValue = value;
+        }
+      }
+      target.emit('debug', [
+        'Leaf --- >>> _makeChange setting value from ',
+        target.value,
+        ' to ',
+        updatedValue,
+        'from ',
+        value,
+      ]);
+      return new Change(value, target, updatedValue);
   }
 }
