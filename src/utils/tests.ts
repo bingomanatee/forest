@@ -282,7 +282,7 @@ export function makeNew(type, isInstance = false) {
       break;
 
     case FORM_OBJECT:
-      return {};
+      out = {};
       break;
   }
 

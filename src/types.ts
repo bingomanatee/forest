@@ -12,6 +12,7 @@ export type LeafType = {
   next: (any, direction?: symboly) => void;
   initialized: boolean;
   emit: (name: string, value?: any) => void;
+  on: (type: string, listener: Function) => void;
 };
 
 export type SelectorType = NonNullable<{

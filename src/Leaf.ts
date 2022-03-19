@@ -13,27 +13,22 @@ import {
   hasKey,
   isArr,
   isFn,
-  isObj,
   isThere,
-  keys,
   testForType,
   toMap,
-  ucFirst,
 } from './utils';
 import {
   ABSENT,
   CHANGE_ABSOLUTE,
-  FORM_ARRAY,
-  FORM_MAP,
-  FORM_OBJECT,
   TYPE_ANY,
 } from './constants';
 import { SelectorType, symboly } from './types';
 import WithDebug from './Leaf/WithDebug';
+import WithActions from './Leaf/WithActions';
 import listenForChange from './utils/listenForChange';
-
 const NO_VALUE = Symbol('no value');
-
+// @ts-ignore
+@WithActions
 // @ts-ignore
 @WithDebug
 export default class Leaf {
@@ -50,19 +45,7 @@ export default class Leaf {
 
     this.version = 0;
     this.snapshot(0);
-    if (!this.root._initialized) {
-      this._flushJournal();
-    }
-
-    switch (this.form) {
-      case FORM_OBJECT:
-        this.inferActions();
-        break;
-
-      case FORM_MAP:
-        this.inferActions();
-        break;
-    }
+    this._flushJournal();
 
     this._initialized = true;
   }
@@ -82,14 +65,6 @@ export default class Leaf {
 
   /* -------------- event ------------- */
   // endregion
-  private _selectors?: Map<any, SelectorType> | null;
-
-  get selectors(): Map<any, SelectorType> {
-    if (!this._selectors) {
-      this._selectors = new Map();
-    }
-    return this._selectors;
-  }
 
   /**
    *  ------------------- events ----------------------
@@ -112,7 +87,7 @@ export default class Leaf {
     });
   }
 
-  emit(message, value) {
+  emit(message, value: any = null) {
     this.e.emit(message, value);
   }
 
@@ -369,19 +344,22 @@ export default class Leaf {
       }
     });
   }
+  
+  public _useSetters: boolean | string | null = null;
 
   config(opts: any = {}) {
     const {
+      setters = null,
       parent = null,
       branches = null,
       test,
       name,
-      actions,
       type,
       any,
       selectors,
     } = opts;
     this._parent = parent;
+    this._useSetters = setters; // should be in actions, but order of operations has issues
 
     this.name = name;
     if (!this.name && !this.parent) {
@@ -400,17 +378,6 @@ export default class Leaf {
       this.addTest(testForType);
     }
     if (typeof test === 'function') this.addTest(test);
-
-    if (isObj(actions)) {
-      Object.keys(actions).forEach(key => {
-        const fn = actions[key];
-        if (isFn(fn)) {
-          this.addAction(key, fn);
-        } else {
-          console.warn('bad action value for ', key, ', value must be fn', fn);
-        }
-      });
-    }
 
     if (isThere(selectors)) {
       toMap(selectors).forEach((fn, name) => {
@@ -485,8 +452,8 @@ export default class Leaf {
       this.snapshot(version);
       dirtyLeaves.push(this);
     }
- 
-    this.beach((branch) => {
+
+    this.beach(branch => {
       const dirtyBranches = branch.advance(version);
       if (dirtyBranches.length) {
         dirtyLeaves = [...dirtyLeaves, ...dirtyBranches];
@@ -702,7 +669,8 @@ export default class Leaf {
   /**
    * ---------------------- subscribe -------------------
    */
-  //region subscribe
+  // region subscribe
+    
   private _subject: SubjectLike<any> | null = null;
 
   get subject(): SubjectLike<any> {
@@ -719,11 +687,37 @@ export default class Leaf {
 
     return this.subject.subscribe(listener);
   }
-  //endregion
+  
+  pipe(...args) {
+    // @ts-ignore
+    return this.subject.pipe(...args);
+  }
+  
+  /**
+   * subscribe to a subset of this leaf; only gets notified if 
+   * those fields actionslly changed. 
+   * @param fields
+   */
+  select(...fields) {
+    const fieldNames = flattenDeep(fields);
+    return this.pipe(
+      map(value => {
+        const out = new Map();
+        const type = detectForm(value);
+        fieldNames.forEach(name => {
+          out.set(name, getKey(value, name, type));
+        });
+        return out;
+      }),
+      distinctUntilChanged()
+    );
+  }
+  
+  // endregion
   /**
    *  -------------------- delKeys --------------------
    *  */
-  //region delkeys
+  // region delkeys
 
   _delKeys(keys) {
     return delKeys(clone(this.value), keys);
@@ -742,25 +736,22 @@ export default class Leaf {
       }
 
       try {
-        const actionName = `set${ucFirst(key)}`;
-        if (actionName in this._inferredActions) {
-          delete this._inferredActions[actionName];
-        }
+        this.emit('action-remove-setter', { name: key, noBlend: true });
       } catch (err) {
         this.emit('debug', [`cannot delete action for key ${key}`, err]);
       }
     });
 
-    this._makeDo();
+    this.emit('actions');
 
     const value = this._delKeys(keys);
     this.next(value, CHANGE_ABSOLUTE);
   }
-  //endregion
+  // endregion
   /**
    * ----------------------- snapshot, rollback -----------------
    */
-  //region snapshot
+  // region snapshot
   snapshot(version = 0) {
     this.history.set(version, this.value);
   }
@@ -815,126 +806,54 @@ export default class Leaf {
       });
     }
   }
-  //endregion
+  // endregion
 
   /**
-   *  ------------------- Actions ---------------------
-   *  */
-  // region actions
+   * ----------------------- selectors ---------------------------
+   * incomplete; designed to implement virtual fields computed off the value
+   * and itds properties, a la reselect
+   */
+  // region selectors
+  private _selectors?: Map<any, SelectorType> | null;
 
-  private _inferredActions: any = null;
-  private _userActions: any = null;
-  inferActions() {
-    const valKeys = keys(this.value);
-    this._inferredActions = {};
-    valKeys.forEach(key => {
-      this.addAction(
-        `set${ucFirst(key)}`,
-        (leaf, value) => {
-          return leaf.set(key, value);
-        },
-        true,
-        true
-      );
-    });
-    
-    this.beach((_branch, key) => {
-      if (!valKeys.includes(key)) {
-        this.addAction(
-          `set${ucFirst(key)}`,
-          (leaf, value) => {
-            return leaf.set(key, value);
-          },
-          true,
-          true
-        );
-      }
-    });
+  get selectors(): Map<any, SelectorType> {
+    if (!this._selectors) {
+      this._selectors = new Map();
+    }
+    return this._selectors;
+  }
   
-    this._makeDo();
+  addSelector(name, selector) {
+    this.selectors.set(name, { selector, value: ABSENT, valid: false });
+    this._computeSelector(name);
   }
 
-  addAction(name: string, fn, inferred = false, noBlend = false): boolean {
-    try {
-      if (inferred) {
-        if (!this._inferredActions) {
-          this._inferredActions = {};
-        }
-        this._inferredActions[name] = (...args) =>
-          this.transact(() => fn(this, ...args));
-      } else {
-        if (!this._userActions) {
-          this._userActions = {};
-        }
-        this._userActions[name] = (...args) =>
-          this.transact(() => fn(this, ...args));
-      }
-      return true;
-    } catch (err) {
-      console.warn('cannot addAction', name, fn);
+  _computeSelector(name) {
+    if (this._selectors && this.selectors.has(name)) {
       // @ts-ignore
-      console.warn(err.message);
-      return false;
-    }
-    if (!noBlend) this._makeDo();
-  }
+      const { selector } = this.selectors.get(name);
+      let valid = false;
+      let value: any = ABSENT;
 
-  set(name, value: any) {
-    if (this._isStopped) {
-      throw e('cannot set after a branch is stopped', { name, value });
-    }
-    if (this._branches && this._branches.has(name)) {
-      this.branch(name).next(value);
-    } else {
-      switch (this.form) {
-        case FORM_OBJECT:
-          this.next({ [name]: value });
-          break;
-
-        case FORM_MAP:
-          this.next(new Map([[name, value]]));
-          break;
-
-        case FORM_ARRAY:
-          const next = [...this.value];
-          if (typeof name === 'number') {
-            if (Array.isArray(value)) {
-              next.splice(name, value.length, ...value);
-            } else {
-              next[name] = value;
-            }
-            this.next(next);
-          } else {
-            console.warn('set (array) with non-numeric index');
-          }
-          break;
-
-        default:
-          console.warn('set attempted on subject of type', this.form);
+      try {
+        value = isFn(selector)
+          ? selector(this.value, this)
+          : this.do[selector]();
+        valid = true;
+      } catch (err) {
+        value = err;
       }
+
+      this.selectors.set(name, { selector, value, valid });
     }
-    return value;
   }
+  // endregion
+  
+  /**
+   * ---------------------------- inspection, misc.
+   */
 
-  pipe(...args) {
-    // @ts-ignore
-    return this.subject.pipe(...args);
-  }
-
-  select(...fields) {
-    const fieldNames = flattenDeep(fields);
-    return this.pipe(
-      map(value => {
-        const out = new Map();
-        const type = detectForm(value);
-        fieldNames.forEach(name => {
-          out.set(name, getKey(value, name, type));
-        });
-        return out;
-      }),
-      distinctUntilChanged()
-    );
-  }
+  // region inspection
 
   private _do: any;
 
@@ -944,24 +863,7 @@ export default class Leaf {
     }
     return this._do;
   }
-
-  private _makeDo() {
-    this._do = {};
-    [this._inferredActions, this._userActions].forEach(actionSet => {
-      if (isObj(actionSet)) {
-        Object.assign(this._do, actionSet);
-      }
-    });
-  }
-
-  // endregion
-
-  /**
-   * ---------------------------- inspection, misc.
-   */
-
-  // region inspection
-
+  
   toJSON(network = false) {
     if (network && this.branches.size) {
       const out = this.toJSON();
@@ -1000,40 +902,14 @@ export default class Leaf {
     return this._isStopped;
   }
 
-  addSelector(name, selector) {
-    this.selectors.set(name, { selector, value: ABSENT, valid: false });
-    this._computeSelector(name);
-  }
-
-  _computeSelector(name) {
-    if (this._selectors && this.selectors.has(name)) {
-      // @ts-ignore
-      const { selector } = this.selectors.get(name);
-      let valid = false;
-      let value: any = ABSENT;
-
-      try {
-        value = isFn(selector)
-          ? selector(this.value, this)
-          : this.do[selector]();
-        valid = true;
-      } catch (err) {
-        value = err;
-      }
-
-      this.selectors.set(name, { selector, value, valid });
-    }
-  }
-
   complete() {
-
     if (this._branches) {
       this.beach(branch => {
         branch.complete();
-      }); 
+      });
       this.branches.clear();
-    } 
-    
+    }
+
     if (this._subject) this._subject.complete();
     this._isStopped = true;
   }

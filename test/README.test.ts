@@ -69,12 +69,12 @@ describe('README', () => {
         }
       );
 
-      box.subscribe(value => {
-        console.log('... is now', value);
-      });
+      /*  box.subscribe(_value => {
+        //   console.log('... is now', value);
+      });*/
 
       box.do.setBottomRight({ x: 50, y: 50 });
-      console.log('box area:', box.do.area());
+      //  console.log('box area:', box.do.area());
     });
 
     describe('login form 2', () => {
@@ -158,7 +158,7 @@ describe('README', () => {
 
         login.branch('username').do.update('foo');
 
-        console.log('next state: ', login.toJSON(true));
+        // console.log('next state: ', login.toJSON(true));
         expect(current.username.value).toBe('foo');
         expect(current.username.touched).toBeTruthy();
         expect(current.username.error).toBeFalsy();
@@ -172,9 +172,9 @@ describe('README', () => {
 
         login.branch('username').do.update('foo');
         login.branch('password').do.update('bad pass');
-        console.log('status 1: ', current);
+        //  console.log('status 1: ', current);
         login.do.reset();
-        console.log('after reset: ', current);
+        //  console.log('after reset: ', current);
 
         expect(current.username.value).toBe('');
         expect(current.username.title).toBe('User Name');
@@ -211,7 +211,7 @@ describe('README', () => {
 
       user.do.setFirstName(' Bob  ');
       user.do.setAge('45');
-      console.log('user is ', user.value);
+      // console.log('user is ', user.value);
       //   user is  { firstName: 'Bob', lastName: '', age: 45, gender: '?' }
     });
   });
