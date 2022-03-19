@@ -17,11 +17,7 @@ import {
   testForType,
   toMap,
 } from './utils';
-import {
-  ABSENT,
-  CHANGE_ABSOLUTE,
-  TYPE_ANY,
-} from './constants';
+import { ABSENT, CHANGE_ABSOLUTE, TYPE_ANY } from './constants';
 import { SelectorType, symboly } from './types';
 import WithDebug from './Leaf/WithDebug';
 import WithActions from './Leaf/WithActions';
@@ -344,7 +340,7 @@ export default class Leaf {
       }
     });
   }
-  
+
   public _useSetters: boolean | string | null = null;
 
   config(opts: any = {}) {
@@ -670,7 +666,7 @@ export default class Leaf {
    * ---------------------- subscribe -------------------
    */
   // region subscribe
-    
+
   private _subject: SubjectLike<any> | null = null;
 
   get subject(): SubjectLike<any> {
@@ -687,15 +683,15 @@ export default class Leaf {
 
     return this.subject.subscribe(listener);
   }
-  
+
   pipe(...args) {
     // @ts-ignore
     return this.subject.pipe(...args);
   }
-  
+
   /**
-   * subscribe to a subset of this leaf; only gets notified if 
-   * those fields actionslly changed. 
+   * subscribe to a subset of this leaf; only gets notified if
+   * those fields actionslly changed.
    * @param fields
    */
   select(...fields) {
@@ -712,7 +708,7 @@ export default class Leaf {
       distinctUntilChanged()
     );
   }
-  
+
   // endregion
   /**
    *  -------------------- delKeys --------------------
@@ -822,7 +818,7 @@ export default class Leaf {
     }
     return this._selectors;
   }
-  
+
   addSelector(name, selector) {
     this.selectors.set(name, { selector, value: ABSENT, valid: false });
     this._computeSelector(name);
@@ -848,7 +844,7 @@ export default class Leaf {
     }
   }
   // endregion
-  
+
   /**
    * ---------------------------- inspection, misc.
    */
@@ -863,7 +859,7 @@ export default class Leaf {
     }
     return this._do;
   }
-  
+
   toJSON(network = false) {
     if (network && this.branches.size) {
       const out = this.toJSON();

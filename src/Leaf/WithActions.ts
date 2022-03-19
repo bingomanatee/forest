@@ -1,5 +1,5 @@
-import {FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
-import {e, isCompound, isFn, isObj, keys, ucFirst } from '../utils';
+import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
+import { e, isCompound, isFn, isObj, keys, ucFirst } from '../utils';
 
 function listenForSetters(target, opts) {
   target.on('action', ({ name, fn, inferred = false, noBlend = false }) => {
@@ -31,7 +31,7 @@ function listenForSetters(target, opts) {
   });
 
   target.on('action-remove-setter', ({ name, noBlend = true }) => {
-    const actionName = `set${ucFirst( name )}`;
+    const actionName = `set${ucFirst(name)}`;
     if (target._inferredActions && actionName in target._inferredActions) {
       delete target._inferredActions[actionName];
     }
@@ -123,7 +123,7 @@ export default function WithActions(Cons) {
         return this._useSetters !== false;
         // unless actively switched off, all root Leafs use setters
       } else {
-         if (this.root._useSetters === 'all') {
+        if (this.root._useSetters === 'all') {
           return true;
         } else {
           return this._useSetters === true;
@@ -149,7 +149,6 @@ export default function WithActions(Cons) {
         }
       }
     }
-
 
     set(name, value: any) {
       if (this._isStopped) {
