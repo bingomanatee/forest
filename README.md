@@ -8,14 +8,14 @@ system, it has an extensive commit cycle with validation, transactions and a str
 A leaf is a management system for a single element of data. 
 Leafs can be centrally managed, or have branch managers delegated to manage properties in an object/Map leaf.
 
-Branches are added to leaves in one of the following methods: 
+Branches are added to Leafs in one of the following methods: 
 
 Only Leaf instances whose value is an object, Map or array can have branches. Branches are not 
 automatic - not all of an objects' or Map's properties are managed with branches.
 
 To create a Branch on a leaf you must define the leaf in either
 
-1. **configuration:** calling leaf with a branches property in the second argument:
+1. **configuration:** calling leaf with a branch's property in the second argument:
 
 ```javascript
 
@@ -70,6 +70,18 @@ console.log('point is now', point.value);
 // 'point is now', {x: 3, y: 0, z: 0}
 
 ```
+
+note - this is by *default* true for only the root leaf. This is to reduce the overhead of multiple child branches
+having actions that probably will never get called. 
+
+* if you want to enable setters for **all** branches in a leaf, pass {setters: 'all'} to the root leaf's 
+  options. 
+* if you want to selectively enable branches' setters, pass {setters: true} to the branches that you want to 
+  have setters. 
+
+By the way, every Leaf (or branch) has a `.set(name, value)` method; under the hood that is what setter
+functions use. So if you want to set a branches' key, but you don't want actions for each and every value of it
+to be created, you can use  `myLeaf.set('name', 'Bob')`. 
 
 ### User defined actions
 
@@ -167,10 +179,10 @@ console.log('after save');
 
 ### Namesppace conflicts
 
-User actions and set (inferred) actions are stored seperately. Every time an action (of either type) is created,
+User actions and set (inferred) actions are stored in different collections. Every time an action (of either type) is created,
 the two collections are blended into _do. If you define a setFoo method, it will override any inferred actions. 
 
-You can use this to effect a filter before passing keys:
+You can actually take advantage of this 'bug' to create a filter before passing keys:
 
 ```javascript
 
@@ -206,6 +218,15 @@ console.log('user is ', user.value);
 
 ```
 
+A word of warning; `myName.do.set[field]` is **only one of the many ways a leaf's property's values can be changed.**
+
+* you can also change a leaf's property value by calling `myLeaf.next({key: value})`;
+* if the property is managed by a branch, you can call `myLeaf.branches('key').next(value)`.
+* If the leaf is not a root, changes to a root can percolate upwards and change a leaf's property value by indirectly
+  calling next (as above). 
+
+If you want a bulletproof way to constrain a leaf's property, put it under a branch with a throwing test. 
+
 ### Async actions
 
 Actions are designed to be **synchronous**; any errors that happen asynchronously are _NOT going to get trapped by the 
@@ -219,7 +240,7 @@ If you want to use async systems in your leaf, you can either:
 
 ## `.value`
 
-THe value of a Leaf can be anything; however, in order not to make branching "wierd", the *form* 
+THe value of a Leaf can be anything; however, in order not to make branching "problematic", the *form* 
 of a leaf should not change(see below for details); you don't usually want to replace an object with an array,
 though there are ways that can be done. (see "any" below);
 
@@ -427,7 +448,8 @@ The second property of Leaf can be an object with any/all/none of these properti
 
 * **name** - an identifier for the leaf. set/overridden for Leaf 
   instances made/passed into `.branch(name, value)`
-* **test** - a function; will be passed each change, as it is asserted; if it returns anything "truthy" (not zero, null, etc),
+* **test** - a function; will be passed each change, as it is asserted;  
+ if it returns anything "truthy" (not zero, null, etc),
   will block the updating of a Leaf.
 * **actions** - an object of name/function accessible off the `.do` object property of your Leaf.
 * **branches** - an object of name/branch values(or Leaf instances). Note, even if your Leaf
@@ -444,6 +466,9 @@ The second property of Leaf can be an object with any/all/none of these properti
   - an array of acceptable types. 
 * **any** if true, disables ALL type / form checking.
 * **debug** - a boolean that if true, will echo extended data; used to develop Leaf code.
+* **setters** - whether to create set[field] actions in the leaf. By default, branches do not 
+  have setter actions; set root leaf's setters options to 'all' to activate branch actions, or set individual
+  branch 'setters' option to true to selectively actviate them.
   You can set/extend these values post-creation by calling `.config(opts)` to, say, add
 some actions or branches to a Leaf instance at any time. 
 
@@ -464,7 +489,7 @@ calling `complete()` sets the `.isStopped` read-only boolean to be set to true; 
 directly or indirectly trigger `complete()`, you may want to double-check `.isStopped` inside your own code to ensure
 your leaf is still active.
 
-## Immer integration
+## Immer integration and uniqueness
 
 LeafImmer is a class with all the properties of Leaf that wraps values with the Immer immutable producers. 
 The value of a LeafImmer will be a frozen value, and won't have any referential links between any values in the leaf. 
@@ -473,3 +498,12 @@ LeafImmer instances.
 
 There are no API or usage differences between LeafImmer and Leaf, other than the fact that LeafImmer can only accept
 immerable and scalar values. 
+
+In React, and some other scenarios, referential uniqueness is important. In general, a compound leaf (object/Map/array)
+is cloned every time one of its value changes, so you shouldn't get a "false negative" by listening for distinct
+changes whether or not you use Immer. However, Immer does a really good job of enforcing immutability up and down
+complex data changes, so it's reccommeneded for any scenarios where that is important. 
+
+If you do *not* use immer, keep in mind, this library was not designed to detect/protect against the modification
+of compound types outside of the Leaf; so don't mess with arrays/objects/maps' values or keys; clone them before
+doing any sort of data changing operations. 

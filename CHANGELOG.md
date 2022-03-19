@@ -7,3 +7,10 @@ Initial release version: actions, transact, branches, tests, types, immer
 ## 1.0.2
 
 Fixed bugs relating to branch/parent value transmission and change broadcasting.
+
+## 1.0.3
+
+A major cleanup;
+
+* placed methods into a logical grouping
+* transported messy/peripheral stuff to decorators
