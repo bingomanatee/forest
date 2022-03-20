@@ -78,6 +78,7 @@ describe('Leaf', () => {
       });
     });
   });
+
   describe('branches', () => {
     describe('(object)', () => {
       it('should have consistent branch values', () => {
@@ -374,44 +375,6 @@ describe('Leaf', () => {
     });
   });
 
-  describe('actions', () => {
-    it('should make setters for initial props', () => {
-      const point = new Leaf({ x: 0, y: 0, z: 0 }, {});
-      point.do.setX(3);
-
-      expect(point.value).toEqual({ x: 3, y: 0, z: 0 });
-
-      point.do.setY(4);
-
-      expect(point.value).toEqual({ x: 3, y: 4, z: 0 });
-    });
-
-    it('should allow custom actions', () => {
-      const point = new Leaf(
-        { x: 0, y: 0, z: 0 },
-        {
-          actions: {
-            addTo: (leaf, x, y, z) => {
-              leaf.do.setX(leaf.value.x + x);
-              leaf.do.setY(leaf.value.y + y);
-              leaf.do.setZ(leaf.value.z + z);
-            },
-            length(leaf) {
-              return Math.sqrt(
-                leaf.value.x ** 2 + leaf.value.y ** 2 + leaf.value.z ** 2
-              );
-            },
-          },
-        }
-      );
-      point.do.addTo(2, 4, 6);
-
-      expect(point.value).toEqual({ x: 2, y: 4, z: 6 });
-
-      expect(Math.round(point.do.length())).toEqual(7);
-    });
-  });
-
   describe('subscribe', () => {
     describe('scalar', () => {
       it('should echo basic values', () => {
@@ -519,7 +482,9 @@ describe('Leaf', () => {
       typeLeaf.do.setNum(3);
       expect(typeLeaf.value.num).toBe(3);
 
-      expect(() => typeLeaf.do.setNum('2')).toThrow(/type must be number/);
+      expect(() => typeLeaf.do.setNum('2')).toThrow(
+        /incorrect type for leaf num/
+      );
       expect(typeLeaf.value.num).toBe(3);
 
       typeLeaf.do.setNum(4);
@@ -533,7 +498,9 @@ describe('Leaf', () => {
       typeLeaf.do.setDn(d);
       expect(typeLeaf.value.dn).toBe(d);
 
-      expect(() => typeLeaf.do.setDn('2')).toThrow(/type cannot be string/);
+      expect(() => typeLeaf.do.setDn('2')).toThrow(
+        /incorrect type for leaf dn/
+      );
       expect(typeLeaf.value.dn).toBe(d);
 
       typeLeaf.do.setDn(4);
@@ -547,35 +514,12 @@ describe('Leaf', () => {
 
       expect(() => {
         typeLeaf.do.setStr([]);
-      }).toThrow(/type must be string/);
+      }).toThrow(/incorrect type for leaf str/);
 
       expect(typeLeaf.value.str).toBe('beta');
 
       typeLeaf.do.setStr('gamma');
       expect(typeLeaf.value.str).toBe('gamma');
-    });
-  });
-
-  describe('tests', () => {
-    it('should restrict changes based on a test', () => {
-      const numLeaf = new Leaf(0, {
-        test({ next }): string | void {
-          if (next % 2) return 'must be even';
-        },
-        debug: false,
-      });
-
-      numLeaf.next(4);
-      expect(numLeaf.value).toBe(4);
-
-      expect(() => {
-        numLeaf.next(5);
-      }).toThrow(/must be even/);
-
-      expect(numLeaf.value).toBe(4);
-
-      numLeaf.next(6);
-      expect(numLeaf.value).toBe(6);
     });
   });
 });

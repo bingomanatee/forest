@@ -1,10 +1,96 @@
 import { Change } from '../Change';
-import { ABSENT, CHANGE_ABSOLUTE, CHANGE_DOWN, CHANGE_UP } from '../constants';
-import { clone, setKey } from '../utils';
+import {
+  ABSENT,
+  CHANGE_ABSOLUTE,
+  CHANGE_DOWN,
+  CHANGE_UP,
+  TYPE_ANY,
+} from '../constants';
+import { LeafType } from '../types';
+import {
+  clone,
+  detectForm,
+  detectType,
+  e,
+  getKey,
+  hasKey,
+  isArr,
+  setKey,
+} from '../utils';
 
+function branchChanges(target, value): Map<LeafType, any> {
+  const branchChanges = new Map();
+
+  target.beach((branch, name) => {
+    //@TODO: type test now?
+    if (hasKey(value, name, target.form)) {
+      const newValue = getKey(value, name, target.form);
+      if (newValue !== branch.value) {
+        branchChanges.set(branch, newValue);
+      }
+    }
+  });
+
+  return branchChanges;
+}
+
+function checkForm(target, value) {
+  /**
+   * insures that the value is the same type as the leaf's current value
+   * @param value
+   */
+  if (target.type === TYPE_ANY || target.form === TYPE_ANY) return;
+
+  if (target.type) {
+    const valueType = detectType(value);
+
+    if (target.type === true) {
+      // a specific boolean - not just truthy
+      const targetType = detectType(target.value);
+      if (valueType === targetType) return;
+      throw e(
+        `incorrect type for leaf ${target.name ||
+          ''}; wanted ${targetType.toString()}, got ${targetType.toString()}`,
+        { valueType, targetType, target, value }
+      );
+    }
+
+    if (isArr(target.type)) {
+      if (target.type.includes(valueType)) return;
+      throw e(`incorrect type for leaf ${target.name || ''}; `, {
+        valueType,
+        target,
+        types: target.type,
+        value,
+      });
+    }
+
+    if (valueType !== target.type) {
+      throw e(`incorrect type for leaf ${target.name || ''}`, {
+        valueType,
+        type: target.type,
+        target,
+        value,
+      });
+    }
+  }
+
+  const valueForm = detectForm(value);
+  if (valueForm !== target.form) {
+    throw e(
+      `incorrect form for leaf ${target.name ||
+        ''}; wanted ${target.form.toString()}, got ${valueForm.toString()}`,
+      {
+        valueForm,
+        leafForm: target.form,
+        value,
+      }
+    );
+  }
+}
 export default function listenForChange(target) {
   target.on('change-up', value => {
-    const branchMap = target._getBranchChanges(value);
+    const branchMap = branchChanges(target, value);
     branchMap.forEach((newValue, branch) => {
       branch.next(newValue); // can throw;
     });
@@ -23,9 +109,8 @@ export default function listenForChange(target) {
   });
 
   target.on('change-value', ({ value, direction }) => {
-    if (target.root._initialized && !target.type) {
-      // if type is present, skip checkForm - there is a test for type in tests
-      target._checkForm(value);
+    if (target.isInitialized) {
+      checkForm(target, value);
     }
     target.transact(() => {
       const rootChange = Change.create(target, value, direction);

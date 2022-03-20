@@ -2,25 +2,6 @@ import { ABSENT } from '../constants';
 import { LeafType } from '../types';
 import { isNum, isObj, isThere, toArr } from '../utils';
 
-export default function WithDebug(Cons) {
-  return class LeafWithDebug extends Cons {
-    public debug = false;
-    public _listeningForDebug = false;
-
-    config(opts) {
-      super.config(opts);
-      if (isObj(opts)) {
-        this._debug = opts.debug;
-        if (!this._listeningForDebug && this.debug) {
-          // @ts-ignore
-          this.on('debug', val => sayDebug(val, this));
-          this._listeningForDebug = true;
-        }
-      }
-    }
-  };
-}
-
 function sayDebug(val: any, target: LeafType) {
   if (!target.debug || target.isStopped) {
     return;
@@ -60,4 +41,23 @@ function sayDebug(val: any, target: LeafType) {
   }
 
   console.log(...logArgs);
+}
+
+export default function WithDebug(Cons) {
+  return class LeafWithDebug extends Cons {
+    public debug = false;
+    public _listeningForDebug = false;
+
+    config(opts) {
+      super.config(opts);
+      if (isObj(opts)) {
+        this.debug = opts.debug;
+        if (!this._listeningForDebug && this.debug) {
+          // @ts-ignore
+          this.on('debug', val => sayDebug(val, this));
+          this._listeningForDebug = true;
+        }
+      }
+    }
+  };
 }

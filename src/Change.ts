@@ -50,7 +50,7 @@ export class Change {
 
     if (
       direction !== CHANGE_ABSOLUTE &&
-      target.initialized &&
+      target.isInitialized &&
       isCompound(target.form)
     ) {
       try {

@@ -7,6 +7,7 @@ import {
   detectForm,
   isThere,
   isArr,
+  isFn,
 } from './tests';
 import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
 
@@ -78,16 +79,12 @@ export function makeValue(base, update) {
   const updateType = detectForm(update);
 
   if (baseType !== updateType) {
-    const err = e('makeValue Type Mismatch', {
+    throw e('makeValue Type Mismatch', {
       base,
       update,
       baseType,
       updateType,
     });
-
-    console.log('--- mismatch', err);
-
-    throw err;
   }
 
   let out = update;
@@ -112,5 +109,19 @@ export function makeValue(base, update) {
       });
       break;
   }
+  return out;
+}
+
+export function mapReduce(map: Map<any, any>, fn: Function, initial: any = {}) {
+  if (isFn(initial)) {
+    return mapReduce(map, fn, initial());
+  }
+
+  let out = initial;
+
+  map.forEach((value, name) => {
+    out = fn(out, value, name, map);
+  });
+
   return out;
 }

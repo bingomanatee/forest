@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/camelcase,@typescript-eslint/no-this-alias */
 import Leaf from './Leaf';
-import { makeValue, isCompound, delKeys, detectForm, isThere } from './utils';
+import { makeValue, isCompound, delKeys, detectForm } from './utils';
 import {
   CHANGE_ABSOLUTE,
   CHANGE_DOWN,
@@ -44,13 +44,8 @@ export default class LeafImmer extends Leaf {
       'value = ',
       value,
     ]);
-    const form = detectForm(nextValue);
-    if (!isThere(this.form)) {
-      // initialize form to first time value is set.
-      this.form = form;
-    }
     this._value = nextValue;
-    if (this._initialized) this._dirty = true;
+    if (this._isInitialized) this._dirty = true;
   }
 
   _makeChange(value, direction) {

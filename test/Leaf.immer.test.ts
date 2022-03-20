@@ -384,44 +384,6 @@ describe('LeafImmer', () => {
     });
   });
 
-  describe('actions', () => {
-    it('should make setters for initial props', () => {
-      const point = new Leaf({ x: 0, y: 0, z: 0 }, {});
-      point.do.setX(3);
-
-      expect(point.value).toEqual({ x: 3, y: 0, z: 0 });
-
-      point.do.setY(4);
-
-      expect(point.value).toEqual({ x: 3, y: 4, z: 0 });
-    });
-
-    it('should allow custom actions', () => {
-      const point = new Leaf(
-        { x: 0, y: 0, z: 0 },
-        {
-          actions: {
-            addTo: (leaf, x, y, z) => {
-              leaf.do.setX(leaf.value.x + x);
-              leaf.do.setY(leaf.value.y + y);
-              leaf.do.setZ(leaf.value.z + z);
-            },
-            length(leaf) {
-              return Math.sqrt(
-                leaf.value.x ** 2 + leaf.value.y ** 2 + leaf.value.z ** 2
-              );
-            },
-          },
-        }
-      );
-      point.do.addTo(2, 4, 6);
-
-      expect(point.value).toEqual({ x: 2, y: 4, z: 6 });
-
-      expect(Math.round(point.do.length())).toEqual(7);
-    });
-  });
-
   describe('subscribe', () => {
     describe('scalar', () => {
       it('should echo basic values', () => {
@@ -529,7 +491,9 @@ describe('LeafImmer', () => {
       typeLeaf.do.setNum(3);
       expect(typeLeaf.value.num).toBe(3);
 
-      expect(() => typeLeaf.do.setNum('2')).toThrow(/type must be number/);
+      expect(() => typeLeaf.do.setNum('2')).toThrow(
+        /incorrect type for leaf num/
+      );
       expect(typeLeaf.value.num).toBe(3);
 
       typeLeaf.do.setNum(4);
@@ -543,7 +507,7 @@ describe('LeafImmer', () => {
       typeLeaf.do.setDn(d);
       expect(typeLeaf.value.dn).toBe(d);
 
-      expect(() => typeLeaf.do.setDn([])).toThrow(/type cannot be array/);
+      expect(() => typeLeaf.do.setDn([])).toThrow(/incorrect type for leaf dn/);
       expect(typeLeaf.value.dn).toBe(d);
 
       typeLeaf.do.setDn(4);
@@ -557,7 +521,7 @@ describe('LeafImmer', () => {
 
       expect(() => {
         typeLeaf.do.setStr([]);
-      }).toThrow(/type must be string/);
+      }).toThrow(/incorrect type for leaf str/);
 
       expect(typeLeaf.value.str).toBe('beta');
 

@@ -1,35 +1,6 @@
-import { FORM_ARRAY, FORM_MAP, FORM_OBJECT } from '../constants';
-import { e, isCompound, isFn, isObj, keys, ucFirst } from '../utils';
+import { isCompound, isFn, isObj, keys, ucFirst } from '../utils';
 
-function listenForSetters(target, opts) {
-  target.on('action', ({ name, fn, inferred = false, noBlend = false }) => {
-    try {
-      if (inferred) {
-        if (!target._inferredActions) {
-          // @ts-ignore
-          target._inferredActions = {};
-        }
-        target._inferredActions[name] = (...args) =>
-          target.transact(() => fn(target, ...args));
-      } else {
-        if (!target._userActions) {
-          target._userActions = {};
-        }
-        target._userActions[name] = (...args) =>
-          target.transact(() => fn(target, ...args));
-      }
-      if (!noBlend) {
-        target.emit('actions');
-      }
-      return true;
-    } catch (err) {
-      console.warn('cannot addAction', name, fn);
-      // @ts-ignore
-      console.warn(err.message);
-      return false;
-    }
-  });
-
+function listenForSetters(target) {
   target.on('action-remove-setter', ({ name, noBlend = true }) => {
     const actionName = `set${ucFirst(name)}`;
     if (target._inferredActions && actionName in target._inferredActions) {
@@ -46,72 +17,41 @@ function listenForSetters(target, opts) {
   target.on('actions', type => {
     // --- part one: inferring all the Leaf's values into setters
     if (type === 'setters') {
-      if (target.isUsingSetters) {
-        const valKeys = keys(target.value);
-        target._inferredActions = {};
-        valKeys.forEach(key => {
-          target.emit('action', {
-            name: `set${ucFirst(key)}`,
-            fn: (leaf, value) => {
-              return leaf.set(key, value);
-            },
-            inferred: true,
-            noBlend: true,
-          });
-        });
-
-        target.beach((_branch, key) => {
-          if (!valKeys.includes(key)) {
-            target.emit('action', {
-              name: `set${ucFirst(key)}`,
-              fn: (leaf, value) => {
-                return leaf.set(key, value);
-              },
-              inferred: true,
-              noBlend: true,
-            });
-          }
-        });
-      }
+      target._updateSetters(true);
     }
 
-    // --- part two: merging actions into _do;
-    target._do = {};
-    [target._inferredActions, target._userActions].forEach(pojoOfFunctions => {
-      if (isObj(pojoOfFunctions)) {
-        Object.assign(target._do, pojoOfFunctions);
-      }
-    });
+    target._makeDo();
   });
-
-  const { actions = false } = opts;
-  if (isObj(actions)) {
-    Object.keys(actions).forEach(key => {
-      const fn = actions[key];
-      if (isFn(fn)) {
-        target.emit('action', {
-          name: key,
-          fn,
-        });
-      } else {
-        console.warn('bad action value for ', key, ', value must be fn', fn);
-      }
-    });
-  }
 }
 
 export default function WithActions(Cons) {
   return class LeafWithActions extends Cons {
     _useSetters: boolean | string | null = null;
     _inferredActions: any = null;
-    _userActions: any = null;
+    _userActions?: any;
 
     constructor(value, opts: any = {}) {
       super(value, opts);
 
-      listenForSetters(this, opts);
+      listenForSetters(this);
 
-      this.emit('actions', 'setters');
+      this._updateSetters();
+    }
+
+    __do?: any;
+
+    get _do() {
+      return this.__do;
+    }
+    set _do(value) {
+      this.emit('debug', { n: 2, message: ['setting _do to ', value] });
+      this.__do = value;
+    }
+    get do(): { [key: string]: Function } {
+      if (!this._do) {
+        this._do = {};
+      }
+      return this._do;
     }
 
     get isUsingSetters() {
@@ -134,57 +74,137 @@ export default function WithActions(Cons) {
 
     config(opts) {
       super.config(opts);
+
       if (opts && typeof opts === 'object') {
         if ('setters' in opts) {
           // respect any explicit imperitave for setters
           this._useSetters = opts.setters;
-        } else if (!this.isRoot) {
-          // if the root._useSetters is 'all', then all the setters in
-          if (this.root._useSetters === 'all') {
-            this._useSetters = true;
-          } else {
-            // setters are skipped for non-root leafs by default
-            this._useSetters = false;
-          }
         }
+
+        if (isObj(opts.actions)) {
+          Object.keys(opts.actions).forEach(key => {
+            const fn = opts.actions[key];
+            if (isFn(fn)) {
+              this.addAction(key, fn, false, true);
+            } else {
+              console.warn(
+                'bad action value for ',
+                key,
+                ', value must be fn',
+                fn
+              );
+            }
+          });
+        }
+
+        this._makeDo();
       }
     }
 
-    set(name, value: any) {
-      if (this._isStopped) {
-        throw e('cannot set after a branch is stopped', { name, value });
-      }
-      if (this._branches && this._branches.has(name)) {
-        this.branch(name).next(value);
-      } else {
-        switch (this.form) {
-          case FORM_OBJECT:
-            this.next({ [name]: value });
-            break;
-
-          case FORM_MAP:
-            this.next(new Map([[name, value]]));
-            break;
-
-          case FORM_ARRAY:
-            const next = [...this.value];
-            if (typeof name === 'number') {
-              if (Array.isArray(value)) {
-                next.splice(name, value.length, ...value);
-              } else {
-                next[name] = value;
-              }
-              this.next(next);
-            } else {
-              console.warn('set (array) with non-numeric index');
-            }
-            break;
-
-          default:
-            console.warn('set attempted on subject of type', this.form);
+    addAction(name, fn, inferred = false, noBlend = false) {
+      this.emit('debug', {
+        n: 2,
+        message: [
+          'addAction name = ',
+          name,
+          'inferred = ',
+          inferred,
+          'noBlend = ',
+          noBlend,
+        ],
+      });
+      try {
+        if (inferred) {
+          if (!this._inferredActions) {
+            // @ts-ignore
+            this._inferredActions = {};
+          }
+          this._inferredActions[name] = (...args) =>
+            this.transact(() => fn(this, ...args));
+        } else {
+          if (!this._userActions) {
+            this.emit('debug', {
+              n: 2,
+              message: 'addAction: creating userAction',
+            });
+            this._userActions = {};
+          }
+          this._userActions[name] = (...args) =>
+            this.transact(() => fn(this, ...args));
+          this.emit('debug', {
+            n: 1,
+            message: [
+              'addAction name = ',
+              name,
+              '_userActions is now  ',
+              this._userActions,
+            ],
+          });
         }
+      } catch (err) {
+        this.emit('debug', ['addAction: throws', err]);
+        console.warn('cannot add action', name, fn, err);
       }
-      return value;
+      if (!noBlend) {
+        this.emit('actions');
+      }
+      return this;
+    }
+
+    addSetter(name, noBlend = false) {
+      this.addAction(
+        `set${ucFirst(name)}`,
+        (leaf, value) => {
+          return leaf.set(name, value);
+        },
+        true,
+        noBlend
+      );
+    }
+
+    _makeDo() {
+      this.emit('debug', {
+        n: 2,
+        message: ['_makeDo use = ', this.isUsingSetters],
+      });
+
+      // --- part two: merging actions into _do;
+      this._do = {};
+      [this._inferredActions, this._userActions].forEach(pojoOfFunctions => {
+        if (isObj(pojoOfFunctions)) {
+          Object.assign(this._do, pojoOfFunctions);
+        }
+      });
+    }
+
+    _updateSetters(noBlend = false) {
+      this.emit('debug', {
+        message: [
+          '_updateSetters: noBlend=',
+          noBlend,
+          'use = ',
+          this.isUsingSetters,
+        ],
+      });
+
+      this._inferredActions = {};
+
+      if (!this.isUsingSetters) {
+        this.emit('debug', '_updateSetters: not using setters, not executing');
+        return;
+      }
+
+      this.beach((_branch, key) => {
+        this.addSetter(key, true);
+      });
+
+      keys(this.value).forEach(key => {
+        this.addSetter(key, true);
+      });
+
+      if (!noBlend) {
+        this._makeDo();
+      }
     }
   };
 }
