@@ -142,7 +142,7 @@ export default function WithSelectors(Cons) {
     get subject() {
       if (!this._decoratedSubject) {
         const target = this;
-        this._decoratedSubject = super.subject.pipe(
+        this._decoratedSubject = this._subject.pipe(
           map(value => {
             return target.valueWithSelectors(value);
           })

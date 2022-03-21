@@ -165,7 +165,11 @@ export default class Leaf {
   set value(value: any) {
     if (this._value === value) return;
     this._value = value;
-    if (this.isInitialized) this._dirty = true;
+    if (this.isInitialized) {
+      this._dirty = true;
+    } else {
+      this._subject.next(value);
+    }
   }
 
   get historyString() {
@@ -397,10 +401,8 @@ export default class Leaf {
   // endregion
 
   broadcast() {
+    this.emit('debug', ['broadcasting ', this.value]);
     if (!this.inTransaction && !this.isStopped) {
-      if (!this._subject) {
-        this._subject = new BehaviorSubject(this.value);
-      }
       this._subject.next(this.value);
     }
   }
@@ -687,12 +689,9 @@ export default class Leaf {
    * @param value
    */
 
-  private _subject: SubjectLike<any> | null = null;
+  protected _subject = new BehaviorSubject(null);
 
   get subject(): SubjectLike<any> {
-    if (!this._subject) {
-      this._subject = new BehaviorSubject(this.value);
-    }
     return this._subject;
   }
 
