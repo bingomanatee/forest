@@ -1,6 +1,6 @@
-import { LeafImmer as Leaf } from '../src';
-import { TYPE_STRING, TYPE_NUMBER } from '../src/constants';
-import { toMap } from '../src/utils';
+import { LeafImmer as Leaf } from '../../src';
+import { TYPE_STRING, TYPE_NUMBER } from '../../src/constants';
+import { toMap } from '../../src/utils';
 
 // import { inspect } from 'util';
 

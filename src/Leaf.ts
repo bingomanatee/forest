@@ -88,12 +88,12 @@ export default class Leaf {
   }
 
   /*
-    the highest version that has ever been used;
-    should be true for the entire tree,
-    as changes to any branch version cascade to the parent,
-    as do get attempts.
-    highestVersion does not decline in rollback.
-    */
+      the highest version that has ever been used;
+      should be true for the entire tree,
+      as changes to any branch version cascade to the parent,
+      as do get attempts.
+      highestVersion does not decline in rollback.
+      */
   private _highestVersion = 0;
 
   get highestVersion(): number {
@@ -147,6 +147,10 @@ export default class Leaf {
    */
 
   //region value
+  valueWithSelectors(_value?: any) {
+    return this.value;
+  }
+
   public _value: any = ABSENT;
 
   get value(): any {
@@ -176,13 +180,13 @@ export default class Leaf {
   private _history?: Map<number, any>;
 
   /*
-  value is the current version of this leaf.
-  A leaf can have children with lower version numbers than it,
-  but a leaf should never have children with higher versions than it.
-  note - version is set to null for transient values inside a transact();
-   the outermost transact  will advance all dirty data to the next version,
-   and rollback will purge it back to a known prior one.
-*/
+    value is the current version of this leaf.
+    A leaf can have children with lower version numbers than it,
+    but a leaf should never have children with higher versions than it.
+    note - version is set to null for transient values inside a transact();
+     the outermost transact  will advance all dirty data to the next version,
+     and rollback will purge it back to a known prior one.
+  */
 
   get history() {
     if (!this._history) this._history = new Map();
@@ -252,14 +256,14 @@ export default class Leaf {
   // region transactions
 
   /*
-    transactions are global and managed from the root of the tree.
-    They are stored in an array and tracked in a BehaviorSubject
-    that stores a set from that array.
-
-    The nature of what token is stored in the array is not really important
-    as long as its referentially unique; as such, symbols make good
-    transaction tokens.
-     */
+      transactions are global and managed from the root of the tree.
+      They are stored in an array and tracked in a BehaviorSubject
+      that stores a set from that array.
+  
+      The nature of what token is stored in the array is not really important
+      as long as its referentially unique; as such, symbols make good
+      transaction tokens.
+       */
 
   get $$() {
     console.log('>>>>>>>>>>>>>>!!!!!!!!!! l - selectors');
@@ -394,7 +398,10 @@ export default class Leaf {
 
   broadcast() {
     if (!this.inTransaction && !this.isStopped) {
-      this.subject.next(this.value);
+      if (!this._subject) {
+        this._subject = new BehaviorSubject(this.value);
+      }
+      this._subject.next(this.value);
     }
   }
 
@@ -663,6 +670,7 @@ export default class Leaf {
     this.emit('debug', ['end of transaction', token]);
     return out;
   }
+
   // endregion
 
   /**
@@ -779,6 +787,7 @@ export default class Leaf {
   get(name): any {
     return getKey(this.value, name, this.form);
   }
+
   // endregion
   /**
    *  -------------------- delKeys --------------------

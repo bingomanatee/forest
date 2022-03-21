@@ -4,6 +4,7 @@ export type doType = { [key: string]: Function };
 
 export type LeafType = {
   value: any;
+  name: any;
   next: (any, direction?: symboly) => void;
 
   root: LeafType;
@@ -30,6 +31,7 @@ export type LeafType = {
   form?: symboly;
   debug: boolean;
   toJSON: Function;
+  valueWithSelectors: (value?: any) => any;
 };
 
 export type SelectorType = NonNullable<{

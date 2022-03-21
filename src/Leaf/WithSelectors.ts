@@ -6,7 +6,26 @@ import { map, SubjectLike } from 'rxjs';
 
 export default function WithSelectors(Cons) {
   return class LeafWithSelectors extends Cons {
+    config(opts) {
+      super.config(opts);
+      if (isObj(opts)) {
+        const { selectors = ABSENT, localSelectors = ABSENT } = opts;
+
+        if (isThere(selectors)) {
+          this.addSelectors(selectors);
+        }
+
+        if (isThere(localSelectors)) {
+          this._localSelectors = localSelectors;
+        }
+      }
+    }
+
     _$?: any | null;
+    _localSelectors = false;
+    _$snapshot?: Map<any, any>;
+    _$snapVersion?: number | null = -1;
+
     get $() {
       this.emit('debug', 'override get $');
       if (!this._$) {
@@ -14,21 +33,10 @@ export default function WithSelectors(Cons) {
       }
       return this._$;
     }
-
-    config(opts) {
-      super.config(opts);
-      if (isObj(opts)) {
-        const { selectors = ABSENT } = opts;
-
-        if (isThere(selectors)) {
-          this.addSelectors(selectors);
-        }
-      }
-    }
-
-    _$snapshot?: object;
-    _$snapVersion?: number | null = -1;
-    get $$() {
+    /**
+     * the selector, exported as a name-value map
+     */
+    get $$(): Map<any, any> {
       if (
         !this._$snapshot ||
         this._$snapVersion !== this.version ||
@@ -47,7 +55,62 @@ export default function WithSelectors(Cons) {
           this._$snapVersion = this.version;
         }
       }
+      // @ts-ignore
       return this._$snapshot;
+    }
+
+    valueWithSelectors(value: any = ABSENT) {
+      if (value === ABSENT) {
+        if (this._localSelectors) {
+          return this.value;
+        }
+        value = this.value;
+      }
+
+      if (!this.hasSelectors) {
+        return this.value;
+      }
+
+      let out = value;
+      switch (detectForm(value)) {
+        case FORM_OBJECT:
+          // @ts-ignore
+          out = mapReduce(
+            this.$$,
+            (out, value, key) => {
+              try {
+                out[key] = value;
+              } catch (err) {
+                //
+              }
+              return out;
+            },
+            {
+              // @ts-ignore
+              ...value,
+            }
+          );
+          break;
+
+        case FORM_MAP:
+          // @ts-ignore
+          out = mapReduce(
+            this.$$,
+            (out, value, name) => {
+              out.set(name, value);
+              return out;
+            },
+            new Map(
+              // @ts-ignore
+              value
+            )
+          );
+          break;
+
+        default:
+        //
+      }
+      return out;
     }
 
     addSelectors(selectors) {
@@ -70,42 +133,18 @@ export default function WithSelectors(Cons) {
       this.$.set(name, new Selector(name, selector, this));
     }
 
-    get hasSubjects(): boolean {
+    get hasSelectors(): boolean {
       return this._$ && this.$.size > 0;
     }
 
     _decoratedSubject?: SubjectLike<any>;
-    $subject() {
+
+    get subject() {
       if (!this._decoratedSubject) {
         const target = this;
-        this._decoratedSubject = this.pipe(
+        this._decoratedSubject = super.subject.pipe(
           map(value => {
-            let out = value;
-            if (this.hasSubjects) {
-              const subjectValues = target.$$;
-              if (subjectValues) {
-                switch (detectForm(value)) {
-                  case FORM_OBJECT:
-                    // @ts-ignore
-                    out = { ...value, ...subjectValues };
-                    break;
-
-                  case FORM_MAP:
-                    // @ts-ignore
-                    out = new Map(value);
-                    Object.keys(subjectValues).forEach(name => {
-                      // @ts-ignore
-                      out.set(name, subjectValues[name]);
-                    });
-                    break;
-
-                  default:
-                  //
-                }
-              }
-            }
-
-            return out;
+            return target.valueWithSelectors(value);
           })
         );
       }

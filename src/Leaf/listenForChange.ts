@@ -96,10 +96,11 @@ export default function listenForChange(target) {
     });
   });
 
-  target.on('change-from-branch', branch => {
+  target.on('change-from-branch', (branch: LeafType) => {
     if (branch.name && target.branch(branch.name) === branch) {
       const value = clone(target.value);
-      setKey(value, branch.name, branch.value, target.form);
+      const branchValue = branch.valueWithSelectors();
+      setKey(value, branch.name, branchValue, target.form);
       target.emit('debug', {
         n: 2,
         message: ['--- >>>>>>>>> changing from branch ', branch.name],
