@@ -14,3 +14,7 @@ A major cleanup;
 
 * placed methods into a logical grouping
 * transported messy/peripheral stuff to decorators
+
+## 1.0.5 
+
+Introduced selectors; further code cleanup 
