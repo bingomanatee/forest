@@ -1,5 +1,5 @@
 import { LeafType, strNum } from './types';
-import { isFn } from './utils';
+import { isArr, isFn } from './utils';
 
 export class Selector {
   constructor(name: strNum, props, target: LeafType) {
@@ -7,9 +7,9 @@ export class Selector {
     if (isFn(props)) {
       this.selector = props;
     } else {
-      const { selector, args } = props;
+      const { selector, args = [] } = props;
       this.selector = selector;
-      this.args = args;
+      this._args = args;
     }
     this.target = target;
   }
@@ -17,13 +17,18 @@ export class Selector {
   name: strNum;
   error?: any;
   private readonly selector: Function | string;
-  args: string[] = [];
+  private _args: any[] = [];
   version = -1;
   private readonly target: LeafType;
 
+  get args(): any[] {
+    if (!isArr(this._args)) return [];
+    return this._args;
+  }
+
   get basis() {
-    return this.args.length
-      ? this.args.reduce((out, field) => {
+    return this._args.length
+      ? this._args.reduce((out, field) => {
           try {
             out[field] = this.target.get(field);
           } catch (err) {
