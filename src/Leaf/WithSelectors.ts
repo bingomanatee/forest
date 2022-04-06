@@ -5,6 +5,10 @@ import { Selector } from '../Selector';
 import { map, SubjectLike } from 'rxjs';
 
 export default function WithSelectors(Cons) {
+  /**
+   * manages computed fields
+   * @TODO: freeze updating while computing selectors
+   */
   return class LeafWithSelectors extends Cons {
     config(opts) {
       super.config(opts);

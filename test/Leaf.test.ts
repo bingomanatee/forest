@@ -1,5 +1,4 @@
 import { Leaf } from '../src';
-import { TYPE_DATE, TYPE_NUMBER } from '../src/constants';
 import { toMap } from '../src/utils';
 
 // import { inspect } from 'util';
@@ -459,67 +458,6 @@ describe('Leaf', () => {
           },
         ]);
       });
-    });
-  });
-
-  describe('type', () => {
-    function makeLeaf() {
-      return new Leaf(
-        {},
-        {
-          branches: {
-            str: new Leaf('alpha', { type: true }),
-            num: new Leaf(100, { type: true }),
-            dn: new Leaf(100, { type: [TYPE_DATE, TYPE_NUMBER] }),
-          },
-        }
-      );
-    }
-
-    it('should test numbers', () => {
-      const typeLeaf = makeLeaf();
-
-      typeLeaf.do.setNum(3);
-      expect(typeLeaf.value.num).toBe(3);
-
-      expect(() => typeLeaf.do.setNum('2')).toThrow(
-        /incorrect type for leaf num/
-      );
-      expect(typeLeaf.value.num).toBe(3);
-
-      typeLeaf.do.setNum(4);
-      expect(typeLeaf.value.num).toBe(4);
-    });
-
-    it('should test multi-types', () => {
-      const typeLeaf = makeLeaf();
-
-      const d = new Date();
-      typeLeaf.do.setDn(d);
-      expect(typeLeaf.value.dn).toBe(d);
-
-      expect(() => typeLeaf.do.setDn('2')).toThrow(
-        /incorrect type for leaf dn/
-      );
-      expect(typeLeaf.value.dn).toBe(d);
-
-      typeLeaf.do.setDn(4);
-      expect(typeLeaf.value.dn).toBe(4);
-    });
-
-    it('should test for strings', () => {
-      const typeLeaf = makeLeaf();
-      typeLeaf.do.setStr('beta');
-      expect(typeLeaf.value.str).toBe('beta');
-
-      expect(() => {
-        typeLeaf.do.setStr([]);
-      }).toThrow(/incorrect type for leaf str/);
-
-      expect(typeLeaf.value.str).toBe('beta');
-
-      typeLeaf.do.setStr('gamma');
-      expect(typeLeaf.value.str).toBe('gamma');
     });
   });
 });

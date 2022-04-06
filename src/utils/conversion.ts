@@ -16,7 +16,11 @@ export function toMap(m: any, force = false) {
     return force ? new Map(m) : m;
   }
   const map = new Map();
-  if (isObj(m)) Object.keys(m).forEach(key => map.set(key, m[key]));
+  if (isArr(m)) {
+    for (let i = 0; i < m.length; ++i) {
+      map.set(i, m[i]);
+    }
+  } else if (isObj(m)) Object.keys(m).forEach(key => map.set(key, m[key]));
   return map;
 }
 
