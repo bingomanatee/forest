@@ -70,6 +70,18 @@ export default class Leaf {
     return this._e;
   }
 
+  public on(event: string, listener: Function) {
+    const target = this;
+    return this.e.on(event, value => {
+      if (!target.isStopped) {
+        listener(value);
+      }
+    });
+  }
+
+  emit(message, value: any = null) {
+    this.e.emit(message, value);
+  }
   //endregion
   /**
    *  ------------------- parent/child, branches ------------------
@@ -87,6 +99,12 @@ export default class Leaf {
     return this;
   }
 
+  // endregion
+  /**
+   *  ------------------ version tracking ------------------------
+   */
+
+  // region version
   /*
       the highest version that has ever been used;
       should be true for the entire tree,
@@ -109,13 +127,6 @@ export default class Leaf {
       this.parent.highestVersion = value;
     }
   }
-
-  // endregion
-  /**
-   *  ------------------ version tracking ------------------------
-   */
-
-  // region version
 
   get maxVersion() {
     if (this.isRoot) {
@@ -147,10 +158,6 @@ export default class Leaf {
    */
 
   //region value
-  valueWithSelectors(_value?: any) {
-    return this.value;
-  }
-
   public _value: any = ABSENT;
 
   get value(): any {
@@ -248,9 +255,20 @@ export default class Leaf {
    */
 
   // region selectors
+  /**
+   * this is a "stub" that is decorated by WithSelector
+   * @param _value
+   */
+  valueWithSelectors(_value?: any) {
+    return this.value;
+  }
+
   get $() {
-    console.log('>>>>>>>>>>>>>>!!!!!!!!!! l- $');
     return {};
+  }
+
+  get $$() {
+    return new Map();
   }
 
   //endregion
@@ -268,11 +286,6 @@ export default class Leaf {
       as long as its referentially unique; as such, symbols make good
       transaction tokens.
        */
-
-  get $$() {
-    console.log('>>>>>>>>>>>>>>!!!!!!!!!! l - selectors');
-    return new Map();
-  }
 
   /**
    * ---------------------------- inspection, identity, metadata, misc.
@@ -296,6 +309,10 @@ export default class Leaf {
     return this._isInitialized;
   }
 
+  /**
+   * the general structure (array, map, scale)
+   * less specific than type.
+   */
   get form() {
     return detectForm(this.value);
   }
@@ -362,19 +379,6 @@ export default class Leaf {
     return this._isStopped;
   }
 
-  public on(event: string, listener: Function) {
-    const target = this;
-    return this.e.on(event, value => {
-      if (!target.isStopped) {
-        listener(value);
-      }
-    });
-  }
-
-  emit(message, value: any = null) {
-    this.e.emit(message, value);
-  }
-
   /**
    * this is the max version number present in this leaf, now.
    */
@@ -407,6 +411,11 @@ export default class Leaf {
     }
   }
 
+  /**
+   * short for "branch/forEach"
+   * run a method over each branch
+   * @param fn
+   */
   beach(fn) {
     if (!this._branches) {
       return;
@@ -445,6 +454,8 @@ export default class Leaf {
    */
   branch(name: any, value: any = ABSENT) {
     if (Array.isArray(name)) {
+      // crawl a series of branches
+
       // @typescript-eslint/no-this-alias
       let lastBranch = this;
       name.forEach((nameItem, index) => {
@@ -467,10 +478,13 @@ export default class Leaf {
     }
 
     if (typeof name === 'string' && name.indexOf('.') > 0) {
+      // recurse the method by splitting branch names using '.'
       return this.branch(name.split(/\./g), value);
     }
 
     if (isThere(value)) {
+      // "set" mode - create/add a branch
+
       // creating a new branch - either injecting a leaf-type branch or creating one with that value.
       const branch = value instanceof Leaf ? value : this._branch(value, name);
       branch.config({ name, parent: this });
@@ -478,7 +492,11 @@ export default class Leaf {
       this.emit('change-from-branch', branch);
     }
 
-    if (!this._branches) return undefined;
+    // "get" mode -- return the branch from the local map
+    if (!this._branches) {
+      // branches lazy-creates a map once a branch is added
+      return undefined;
+    }
     return this.branches.get(name);
   }
 
@@ -491,7 +509,7 @@ export default class Leaf {
   /**
    * ----------------- configuration ----------------------
    *
-   * note - each parent of Leaf (from dectorators) will override and delegate this method
+   * note - each parent of Leaf (from decorators) will override and delegate this method
    * to read its needed input. Technically - this method can be called more than once from the outside,
    * but that hasn't been thoroughly tested, and its a good idea to simply call the
    * methods like "addActions" or "addSelector(s)" to update your Leaf.
