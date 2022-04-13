@@ -79,6 +79,20 @@ describe('Leaf', () => {
     });
   });
 
+  describe('#res', () => {
+    it('stores res configs', () => {
+      const dataEle = new Leaf(
+        { id: 100, name: 'Bob' },
+        {
+          res: {
+            url: '/foo/bar',
+          },
+        }
+      );
+      expect(dataEle.res('url')).toBe('/foo/bar');
+    });
+  });
+
   describe('branches', () => {
     describe('(object)', () => {
       it('should have consistent branch values', () => {

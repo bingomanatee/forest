@@ -541,6 +541,7 @@ export default class Leaf {
       name,
       type,
       any,
+      res,
     } = opts;
     this._parent = parent;
     this._useSetters = setters; // should be in actions, but order of operations has issues
@@ -557,6 +558,12 @@ export default class Leaf {
       this.type = type === true ? detectType(this.value) : type;
     }
     if (typeof test === 'function') this.addTest(test);
+
+    if (res) {
+      toMap(res).forEach((res, name) => {
+        this.res(name, res);
+      });
+    }
   }
 
   /**
@@ -588,6 +595,32 @@ export default class Leaf {
 
   // endregion
 
+  /** --------------------- resources (res) --------------------
+   * resources are any sort of configuration, utilities or other tools
+   * that are more or less static; used to augment actions or other functionality
+   */
+
+  // region res
+  private _res;
+  res(name, value = ABSENT) {
+    if (isThere(value)) {
+      // set mode
+      if (!this._res) {
+        this._res = new Map();
+      }
+      this._res.set(name, value);
+    } else {
+      // get mode
+      if (this._res) {
+        return this._res.get(name);
+      }
+      return undefined;
+    }
+  }
+
+  // endregion
+
+  // region transactions
   /**
    * token is an arbitrary object that is referentially unique. An object, Symbol. Not a scalar (string/number).
    * The significant trait of token is that when you popTrans (remove it from the trans collection,
