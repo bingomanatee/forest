@@ -442,6 +442,33 @@ numLeaf.next(10);
 
 ```
 
+## Res(ources)
+
+There are times you need to attach configuration, utilities, DOM items, or other things to a Leaf
+to tune the behavior of actions. One example of a resource is a URL for data i/o. 
+
+Res are also useful for injecting functionality you plan to override with mocks during testing. 
+
+You can set res by passing a map or object of values in options (see below). You can also update res
+by calling `myLeaf.res(name, value)` after creation. 
+
+res values are not monitored by transactions, events, etc.
+
+```javascript
+
+const dataEle = new Leaf(
+{ id: 100, name: 'Bob' },
+{
+  res: {
+    url: '/foo/bar',
+  },
+}
+);
+console.log(dataEle.res('url'));
+// '/foo/bar'
+
+```
+
 ## Options
 
 The second property of Leaf can be an object with any/all/none of these properties:
@@ -466,11 +493,12 @@ The second property of Leaf can be an object with any/all/none of these properti
   - an array of acceptable types. 
 * **any** if true, disables ALL type / form checking.
 * **debug** - a boolean that if true, will echo extended data; used to develop Leaf code.
+* **res** - an object or map of key/values for tuning actions. 
 * **setters** - whether to create set[field] actions in the leaf. By default, branches do not 
   have setter actions; set root leaf's setters options to 'all' to activate branch actions, or set individual
   branch 'setters' option to true to selectively actviate them.
   You can set/extend these values post-creation by calling `.config(opts)` to, say, add
-some actions or branches to a Leaf instance at any time. 
+  some actions or branches to a Leaf instance at any time. 
 
   ## `.complete()` and `.isStopped`
 
