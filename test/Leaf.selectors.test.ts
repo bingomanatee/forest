@@ -103,7 +103,7 @@ describe('Leaf', () => {
     const box = new Leaf(
       {},
       {
-        branches: {
+        children: {
           topLeft: point(0, 10),
           bottomRight: point(20, 0),
         },

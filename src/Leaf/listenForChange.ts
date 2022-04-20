@@ -18,20 +18,20 @@ import {
   setKey,
 } from '../utils';
 
-function branchChanges(target, value): Map<LeafType, any> {
-  const branchChanges = new Map();
+function childChanges(target, value): Map<LeafType, any> {
+  const childChanges = new Map();
 
-  target.beach((branch, name) => {
+  target.beach((child, name) => {
     //@TODO: type test now?
     if (hasKey(value, name, target.form)) {
       const newValue = getKey(value, name, target.form);
-      if (newValue !== branch.value) {
-        branchChanges.set(branch, newValue);
+      if (newValue !== child.value) {
+        childChanges.set(child, newValue);
       }
     }
   });
 
-  return branchChanges;
+  return childChanges;
 }
 
 function checkForm(target, value) {
@@ -90,20 +90,20 @@ function checkForm(target, value) {
 }
 export default function listenForChange(target) {
   target.on('change-up', value => {
-    const branchMap = branchChanges(target, value);
-    branchMap.forEach((newValue, branch) => {
-      branch.next(newValue); // can throw;
+    const branchMap = childChanges(target, value);
+    branchMap.forEach((newValue, child) => {
+      child.next(newValue); // can throw;
     });
   });
 
-  target.on('change-from-branch', (branch: LeafType) => {
-    if (branch.name && target.branch(branch.name) === branch) {
+  target.on('change-from-child', (child: LeafType) => {
+    if (child.name && target.child(child.name) === child) {
       const value = clone(target.value);
-      const branchValue = branch.valueWithSelectors();
-      setKey(value, branch.name, branchValue, target.form);
+      const branchValue = child.valueWithSelectors();
+      setKey(value, child.name, branchValue, target.form);
       target.emit('debug', {
         n: 2,
-        message: ['--- >>>>>>>>> changing from branch ', branch.name],
+        message: ['--- >>>>>>>>> changing from child ', child.name],
       });
       target.next(value, CHANGE_DOWN);
     }
@@ -137,7 +137,7 @@ export default function listenForChange(target) {
           target.emit('change-up', value);
         }
         if (direction !== CHANGE_UP && !target.isRoot) {
-          target.parent.emit('change-from-branch', target);
+          target.parent.emit('change-from-child', target);
         }
       } catch (err) {
         if (!rootChange.isStopped) {
@@ -151,7 +151,7 @@ export default function listenForChange(target) {
 
   target.on('rollback', version => {
     /**
-     * resets all branches by resetting their value to the first one
+     * resets all children by resetting their value to the first one
      * whose version is <= the target.
      *
      * @param version {number}
@@ -172,6 +172,6 @@ export default function listenForChange(target) {
       target._purgeHistoryAfter(version);
     }
 
-    target.branchEmit('rollback', version);
+    target._childEmit('rollback', version);
   });
 }

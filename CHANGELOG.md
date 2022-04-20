@@ -18,3 +18,11 @@ A major cleanup;
 ## 1.0.5 
 
 Introduced selectors; further code cleanup 
+
+## 1.0.8
+
+Adding res(ources);
+
+## 1.0.10
+
+changing name of "branch/branches" to "child/children"

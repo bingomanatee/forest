@@ -42,14 +42,18 @@ export class Selector {
 
   private _value: any = undefined;
   get value() {
-    if (this.version !== this.target.version) {
+    if (
+      typeof this.target.version !== 'number' ||
+      this.version !== this.target.version
+    ) {
       this.error = undefined;
       try {
         if (typeof this.selector === 'string') {
           this._value = this.target.do[this.selector](this.basis);
         } else this._value = this.selector(this.basis, this.target);
-      } catch (_err) {
-        console.warn('selector error:', _err);
+      } catch (err) {
+        console.warn('selector error:', err);
+        this.error = err;
         this._value = undefined;
       }
       if (typeof this.target.version === 'number') {

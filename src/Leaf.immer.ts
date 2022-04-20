@@ -80,20 +80,20 @@ export default class LeafImmer extends Leaf {
     return new LeafImmer(value, { parent: this, name });
   }
 
-  _changeFromBranch(branch) {
-    if (branch.name && this.branch(branch.name) === branch) {
+  _changeFromChild(child) {
+    if (child.name && this.child(child.name) === child) {
       switch (this.form) {
         case FORM_OBJECT:
-          this.next({ [branch.name]: branch.value }, CHANGE_DOWN);
+          this.next({ [child.name]: child.value }, CHANGE_DOWN);
           break;
 
         case FORM_MAP:
-          this.next(new Map([[branch.name, branch.value]]), CHANGE_DOWN);
+          this.next(new Map([[child.name, child.value]]), CHANGE_DOWN);
           break;
 
         case FORM_ARRAY:
           const next = [...this.value];
-          next[branch.name] = branch.value;
+          next[child.name] = child.value;
           this.next(next, CHANGE_DOWN);
           break;
 

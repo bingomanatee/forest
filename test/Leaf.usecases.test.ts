@@ -119,7 +119,7 @@ describe('Leaf', () => {
               },
             },
 
-            branches: {
+            children: {
               name: makeField('name', '', value => {
                 if (!value.length) return 'name must be present';
                 return null;

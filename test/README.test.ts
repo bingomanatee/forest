@@ -38,7 +38,7 @@ describe('README', () => {
         return new Leaf(
           { x, y },
           {
-            branches: {
+            children: {
               x: new Leaf(x, { type: true }),
               y: new Leaf(y, { type: true }),
             },
@@ -51,7 +51,7 @@ describe('README', () => {
           color: 'red',
         },
         {
-          branches: {
+          children: {
             topLeft: point(0, 0),
             bottomRight: point(1, 1),
           },
@@ -116,7 +116,7 @@ describe('README', () => {
             response: null,
           },
           {
-            branches: {
+            children: {
               // @ts-ignore
               username: makeField('User Name', 'text', value => {
                 if (/[\s]+/.test(value)) {
@@ -164,7 +164,7 @@ describe('README', () => {
         expect(current.username.error).toBeFalsy();
       });
 
-      it('should reset the branches partially', () => {
+      it('should reset the children partially', () => {
         const login = makeLogin();
 
         let current;

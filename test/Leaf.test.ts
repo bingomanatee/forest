@@ -93,13 +93,13 @@ describe('Leaf', () => {
     });
   });
 
-  describe('branches', () => {
+  describe('children', () => {
     describe('(object)', () => {
       it('should have consistent branch values', () => {
         const point = new Leaf(
           {},
           {
-            branches: {
+            children: {
               x: 0,
               y: 0,
               z: 0,
@@ -119,11 +119,11 @@ describe('Leaf', () => {
         expect(point.version).toBe(2);
       });
 
-      it('should push changes to branches', () => {
+      it('should push changes to children', () => {
         const point = new Leaf(
           {},
           {
-            branches: {
+            children: {
               x: 0,
               y: 0,
               z: 0,
@@ -152,7 +152,7 @@ describe('Leaf', () => {
           const point = new Leaf(
             {},
             {
-              branches: {
+              children: {
                 x: 0,
                 y: 0,
                 z: 0,
@@ -174,7 +174,7 @@ describe('Leaf', () => {
           const point = new Leaf(
             {},
             {
-              branches: {
+              children: {
                 x: 0,
                 y: 0,
                 z: 0,
@@ -204,7 +204,7 @@ describe('Leaf', () => {
           return new Leaf(
             {},
             {
-              branches: p(x, y, z),
+              children: p(x, y, z),
             }
           );
         }
@@ -213,7 +213,7 @@ describe('Leaf', () => {
           const box = new Leaf(
             {},
             {
-              branches: {
+              children: {
                 topLeft: makePoint(0, 1, 0),
                 topRight: makePoint(1, 1, 0),
                 bottomLeft: makePoint(0, 0, 0),
@@ -254,7 +254,7 @@ describe('Leaf', () => {
             const box = new Leaf(
               {},
               {
-                branches: {
+                children: {
                   topLeft: makePoint(0, 1, 0),
                   topRight: makePoint(1, 1, 0),
                   bottomLeft: makePoint(0, 0, 0),
@@ -279,7 +279,7 @@ describe('Leaf', () => {
             const box = new Leaf(
               {},
               {
-                branches: {
+                children: {
                   topLeft: makePoint(0, 1, 0),
                   topRight: makePoint(1, 1, 0),
                   bottomLeft: makePoint(0, 0, 0),
@@ -313,7 +313,7 @@ describe('Leaf', () => {
     describe('(map)', () => {
       it('should have consistent branch values', () => {
         const point = new Leaf(new Map(), {
-          branches: {
+          children: {
             x: 0,
             y: 0,
             z: 0,
@@ -350,9 +350,9 @@ describe('Leaf', () => {
         expect(point.version).toBe(2);
       });
 
-      it('should push changes to branches', () => {
+      it('should push changes to children', () => {
         const point = new Leaf(new Map(), {
-          branches: {
+          children: {
             x: 0,
             y: 0,
             z: 0,
@@ -418,7 +418,7 @@ describe('Leaf', () => {
           {},
           {
             setters: 'all',
-            branches: {
+            children: {
               start: { x: 0, y: 0 },
               end: { x: 1, y: 1 },
             },
@@ -481,7 +481,7 @@ describe('Leaf', () => {
       return new Leaf(
         {},
         {
-          branches: {
+          children: {
             str: new Leaf('alpha', { type: true }),
             num: new Leaf(100, { type: true }),
             dn: new Leaf(100, { type: [TYPE_DATE, TYPE_NUMBER] }),
