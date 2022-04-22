@@ -198,7 +198,7 @@ export default function WithActions(Cons) {
         this.addSetter(key, true);
       });
 
-      keys(this.value).forEach(key => {
+      keys(this.baseValue).forEach(key => {
         this.addSetter(key, true);
       });
 

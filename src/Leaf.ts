@@ -48,7 +48,7 @@ export default class Leaf {
   constructor(value: any, opts: any = {}) {
     this.debug = !!opts.debug;
     listenForChange(this);
-    this.value = value;
+    this.baseValue = value;
     this._transList = [];
     this.config(opts);
 
@@ -258,7 +258,7 @@ export default class Leaf {
   //region value
   public _value: any = ABSENT;
 
-  get value(): any {
+  get baseValue(): any {
     return this._value;
   }
 
@@ -267,7 +267,7 @@ export default class Leaf {
    * the values of the update are sent out to the children which can reinterpret them.
    * @param value
    */
-  set value(value: any) {
+  set baseValue(value: any) {
     if (this._value === value) return;
     this._value = value;
     if (this.isInitialized) {
@@ -275,6 +275,15 @@ export default class Leaf {
     } else {
       this._subject.next(value);
     }
+  }
+
+  get value() {
+    // overridden in WithSelectors
+    return this.baseValue;
+  }
+
+  set value(nextValue) {
+    this.baseValue = nextValue;
   }
 
   get historyString() {
@@ -358,7 +367,7 @@ export default class Leaf {
    * @param _value
    */
   valueWithSelectors(_value?: any) {
-    return this.value;
+    return this.baseValue;
   }
 
   get $() {
@@ -379,7 +388,7 @@ export default class Leaf {
       transactions are global and managed from the root of the tree.
       They are stored in an array and tracked in a BehaviorSubject
       that stores a set from that array.
-  
+
       The nature of what token is stored in the array is not really important
       as long as its referentially unique; as such, symbols make good
       transaction tokens.
@@ -412,7 +421,7 @@ export default class Leaf {
    * less specific than type.
    */
   get form() {
-    return detectForm(this.value);
+    return detectForm(this.baseValue);
   }
 
   get do(): doType {
@@ -501,9 +510,9 @@ export default class Leaf {
   }
 
   broadcast() {
-    this.emit('debug', ['broadcasting ', this.value]);
+    this.emit('debug', ['broadcasting ', this.baseValue]);
     if (!this.inTransaction && !this.isStopped) {
-      this._subject.next(this.value);
+      this._subject.next(this.baseValue);
     }
   }
   // endregion
@@ -559,7 +568,7 @@ export default class Leaf {
     if (any) {
       this.type = TYPE_ANY;
     } else if (type) {
-      this.type = type === true ? detectType(this.value) : type;
+      this.type = type === true ? detectType(this.baseValue) : type;
     }
     if (typeof test === 'function') this.addTest(test);
 
@@ -701,7 +710,7 @@ export default class Leaf {
     if (!this.inTransaction) {
       this.emit('debug', [
         `----------!!------------ done with set value:`,
-        this.value,
+        this.baseValue,
         `of ${this.name}not in trans - advancing`,
       ]);
 
@@ -818,7 +827,7 @@ export default class Leaf {
           break;
 
         case FORM_ARRAY:
-          const next = [...this.value];
+          const next = [...this.baseValue];
           if (typeof name === 'number') {
             if (Array.isArray(value)) {
               next.splice(name, value.length, ...value);
@@ -839,7 +848,7 @@ export default class Leaf {
   }
 
   get(name): any {
-    return getKey(this.value, name, this.form);
+    return getKey(this.baseValue, name, this.form);
   }
 
   // endregion
@@ -849,7 +858,7 @@ export default class Leaf {
   // region delkeys
 
   _delKeys(keys) {
-    return delKeys(clone(this.value), keys);
+    return delKeys(clone(this.baseValue), keys);
   }
 
   delKeys(...keys) {
@@ -885,7 +894,7 @@ export default class Leaf {
   // region snapshot
 
   snapshot(version = 0) {
-    this.history.set(version, this.value);
+    this.history.set(version, this.baseValue);
   }
 
   /**
@@ -918,7 +927,7 @@ export default class Leaf {
     if (this.version !== null && this.version <= version) {
       return {
         version: this.version,
-        value: this.value,
+        value: this.baseValue,
       };
     }
     return null;
@@ -953,7 +962,7 @@ export default class Leaf {
 
     const out: any = {
       name: this.name,
-      value: this.value,
+      value: this.baseValue,
       version: this.version,
       history: this.historyString,
     };

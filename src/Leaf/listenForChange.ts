@@ -25,7 +25,7 @@ function childChanges(target, value): Map<LeafType, any> {
     //@TODO: type test now?
     if (hasKey(value, name, target.form)) {
       const newValue = getKey(value, name, target.form);
-      if (newValue !== child.value) {
+      if (newValue !== child.baseValue) {
         childChanges.set(child, newValue);
       }
     }
@@ -46,7 +46,7 @@ function checkForm(target, value) {
 
     if (target.type === true) {
       // a specific boolean - not just truthy
-      const targetType = detectType(target.value);
+      const targetType = detectType(target.baseValue);
       if (valueType === targetType) return;
       throw e(
         `incorrect type for leaf ${target.name ||
@@ -98,7 +98,7 @@ export default function listenForChange(target) {
 
   target.on('change-from-child', (child: LeafType) => {
     if (child.name && target.child(child.name) === child) {
-      const value = clone(target.value);
+      const value = clone(target.baseValue);
       const branchValue = child.valueWithSelectors();
       setKey(value, child.name, branchValue, target.form);
       target.emit('debug', {
@@ -122,13 +122,13 @@ export default function listenForChange(target) {
         !(
           target.version !== null &&
           target._history &&
-          target.history.get(target.version) === target.value
+          target.history.get(target.version) === target.baseValue
         )
       ) {
         target.snapshot();
       }
 
-      target.value = rootChange.next;
+      target.baseValue = rootChange.next;
       target.version = null;
       try {
         target.emit('change', rootChange);

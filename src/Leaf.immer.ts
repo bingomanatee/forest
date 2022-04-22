@@ -53,13 +53,13 @@ export default class LeafImmer extends Leaf {
 
     if (direction !== CHANGE_ABSOLUTE && isCompound(this.form)) {
       try {
-        updatedValue = produce(this.value, draft => {
+        updatedValue = produce(this.baseValue, draft => {
           return makeValue(draft, value);
         });
       } catch (err) {
         this.emit('debug', ['error in producing with makeValue:', err]);
         try {
-          updatedValue = makeValue(this.value, value);
+          updatedValue = makeValue(this.baseValue, value);
         } catch (err2) {
           updatedValue = value;
         }
@@ -67,7 +67,7 @@ export default class LeafImmer extends Leaf {
     }
     this.emit('debug', [
       'LeafImmer --- >>> setting value from ',
-      this.value,
+      this.baseValue,
       ' to ',
       updatedValue,
       'from ',
@@ -84,16 +84,16 @@ export default class LeafImmer extends Leaf {
     if (child.name && this.child(child.name) === child) {
       switch (this.form) {
         case FORM_OBJECT:
-          this.next({ [child.name]: child.value }, CHANGE_DOWN);
+          this.next({ [child.name]: child.baseValue }, CHANGE_DOWN);
           break;
 
         case FORM_MAP:
-          this.next(new Map([[child.name, child.value]]), CHANGE_DOWN);
+          this.next(new Map([[child.name, child.baseValue]]), CHANGE_DOWN);
           break;
 
         case FORM_ARRAY:
-          const next = [...this.value];
-          next[child.name] = child.value;
+          const next = [...this.baseValue];
+          next[child.name] = child.baseValue;
           this.next(next, CHANGE_DOWN);
           break;
 
@@ -104,7 +104,7 @@ export default class LeafImmer extends Leaf {
 
   _delKeys(keys) {
     try {
-      return produce(this.value, draft => {
+      return produce(this.baseValue, draft => {
         return delKeys(draft, keys);
       });
     } catch (err) {

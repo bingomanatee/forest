@@ -37,7 +37,7 @@ export class Selector {
           }
           return out;
         }, {})
-      : this.target.value;
+      : this.target.baseValue;
   }
 
   private _value: any = undefined;

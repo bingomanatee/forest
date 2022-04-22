@@ -49,7 +49,7 @@ export default function WithSelectors(Cons) {
         this._$snapshot = mapReduce(
           this.$,
           (out, selector) => {
-            out.set('$' + selector.name, selector.value);
+            out.set('$' + selector.name, selector.baseValue);
             return out;
           },
           new Map()
@@ -66,13 +66,13 @@ export default function WithSelectors(Cons) {
     valueWithSelectors(value: any = ABSENT) {
       if (value === ABSENT) {
         if (this._localSelectors) {
-          return this.value;
+          return this.baseValue;
         }
-        value = this.value;
+        value = this.baseValue;
       }
 
       if (!this.hasSelectors) {
-        return this.value;
+        return this.baseValue;
       }
 
       let out = value;
@@ -126,7 +126,7 @@ export default function WithSelectors(Cons) {
     selector(name) {
       if (this._$) {
         if (this.$.has(name)) {
-          return this.$.get(name).value;
+          return this.$.get(name).baseValue;
         }
       }
       return undefined;
