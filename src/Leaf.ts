@@ -70,16 +70,28 @@ export default class Leaf {
     return this._e;
   }
 
+  public on(event: string, listener: Function) {
+    const target = this;
+    return this.e.on(event, value => {
+      if (!target.isStopped) {
+        listener(value);
+      }
+    });
+  }
+
+  emit(message, value: any = null) {
+    this.e.emit(message, value);
+  }
   //endregion
   /**
-   *  ------------------- parent/child, branches ------------------
+   *  ------------------- parent/child, children ------------------
    *  */
   // region parentChild
-  private _branches: Map<any, any> | undefined;
+  private _children: Map<any, any> | undefined;
 
-  get branches(): Map<any, any> {
-    if (!this._branches) this._branches = new Map();
-    return this._branches;
+  get children(): Map<any, any> {
+    if (!this._children) this._children = new Map();
+    return this._children;
   }
 
   get root(): LeafType {
@@ -87,10 +99,114 @@ export default class Leaf {
     return this;
   }
 
+  beach(fn) {
+    this.eachChild(fn);
+  }
+
+  eachChild(fn) {
+    if (!this._children) {
+      return;
+    }
+    this.children.forEach(fn);
+  }
+
+  addBranches(children) {
+    return this.addChildren(children);
+  }
+
+  addChildren(children) {
+    if (this.isStopped) {
+      throw e('cannot add children to stopped leaf', { leaf: this, children });
+    }
+    if (Array.isArray(children)) {
+      // transport value properties to sub-children
+      children.forEach(name => {
+        this.child(name, getKey(this._value, name));
+      });
+    } else {
+      toMap(children).forEach((child, name) => {
+        this.child(name, child);
+      });
+    }
+  }
+
+  /**
+   * if no value, returns child "name";
+   * if value is a child, injects it as a child at name;
+   * otherwise it creates a new child with value value at name;
+   *
+   * if there is a '.' in the name, it recursively creates object nodes to create a nested child.
+   * @param name
+   * @param value
+   */
+  child(name: any, value: any = ABSENT) {
+    if (Array.isArray(name)) {
+      // crawl a series of children
+
+      // @typescript-eslint/no-this-alias
+      let lastChild = this;
+      name.forEach((nameItem, index) => {
+        if (index === name.length - 1) {
+          lastChild = lastChild.child(nameItem, value);
+        } else {
+          const addChild = lastChild.child(nameItem);
+          if (!addChild) {
+            throw new Error(
+              `cannot resolve path ${name.join(
+                '.'
+              )} broke at ${nameItem}:${index}`
+            );
+          } else {
+            lastChild = addChild;
+          }
+        }
+      });
+      return lastChild;
+    }
+
+    if (typeof name === 'string' && name.indexOf('.') > 0) {
+      // recurse the method by splitting child names using '.'
+      return this.child(name.split(/\./g), value);
+    }
+
+    if (isThere(value)) {
+      // "set" mode - create/add a child
+
+      // creating a new child - either injecting a leaf-type child or creating one with that value.
+      const child =
+        value instanceof Leaf ? value : new Leaf(value, { parent: this, name });
+      child.config({ name, parent: this });
+      this.children.set(name, child);
+      this.emit('change-from-child', child);
+    }
+
+    // "get" mode -- return the child from the local map
+    if (!this._children) {
+      // children lazy-creates a map once a child is added
+      return undefined;
+    }
+    return this.children.get(name);
+  }
+
+  branch(name: any, value: any = ABSENT) {
+    return this.child(name, value);
+  }
+
+  _childEmit(message, value) {
+    this.beach(child => {
+      child.emit(message, value);
+    });
+  }
+  // endregion
+  /**
+   *  ------------------ version tracking ------------------------
+   */
+
+  // region version
   /*
       the highest version that has ever been used;
       should be true for the entire tree,
-      as changes to any branch version cascade to the parent,
+      as changes to any child version cascade to the parent,
       as do get attempts.
       highestVersion does not decline in rollback.
       */
@@ -109,13 +225,6 @@ export default class Leaf {
       this.parent.highestVersion = value;
     }
   }
-
-  // endregion
-  /**
-   *  ------------------ version tracking ------------------------
-   */
-
-  // region version
 
   get maxVersion() {
     if (this.isRoot) {
@@ -147,10 +256,6 @@ export default class Leaf {
    */
 
   //region value
-  valueWithSelectors(_value?: any) {
-    return this.value;
-  }
-
   public _value: any = ABSENT;
 
   get value(): any {
@@ -159,7 +264,7 @@ export default class Leaf {
 
   /**
    * updates the value of this form. There may be a brief inconsistency as
-   * the values of the update are sent out to the branches which can reinterpret them.
+   * the values of the update are sent out to the children which can reinterpret them.
    * @param value
    */
   set value(value: any) {
@@ -248,9 +353,20 @@ export default class Leaf {
    */
 
   // region selectors
+  /**
+   * this is a "stub" that is decorated by WithSelector
+   * @param _value
+   */
+  valueWithSelectors(_value?: any) {
+    return this.value;
+  }
+
   get $() {
-    console.log('>>>>>>>>>>>>>>!!!!!!!!!! l- $');
     return {};
+  }
+
+  get $$() {
+    return new Map();
   }
 
   //endregion
@@ -268,11 +384,6 @@ export default class Leaf {
       as long as its referentially unique; as such, symbols make good
       transaction tokens.
        */
-
-  get $$() {
-    console.log('>>>>>>>>>>>>>>!!!!!!!!!! l - selectors');
-    return new Map();
-  }
 
   /**
    * ---------------------------- inspection, identity, metadata, misc.
@@ -296,6 +407,10 @@ export default class Leaf {
     return this._isInitialized;
   }
 
+  /**
+   * the general structure (array, map, scale)
+   * less specific than type.
+   */
   get form() {
     return detectForm(this.value);
   }
@@ -332,10 +447,10 @@ export default class Leaf {
    * 3. set the value passed in; merges any structures(objects/maps) from previous values.
    * 4. creates a rootChange
    *       emit('change', rootChange) -- triggers any tests which may throw
-   * 5. _changeUp(value) -- update changed fields to branches,
+   * 5. _changeUp(value) -- update changed fields to children,
    *       recursively changeUp for any subProps
    * 6. _changeDown()
-   *        i. _changeFromBranch(this);
+   *        i. _changeFromChild(this);
    *        ii. inject this updated value into its parent
    *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
    *
@@ -362,26 +477,13 @@ export default class Leaf {
     return this._isStopped;
   }
 
-  public on(event: string, listener: Function) {
-    const target = this;
-    return this.e.on(event, value => {
-      if (!target.isStopped) {
-        listener(value);
-      }
-    });
-  }
-
-  emit(message, value: any = null) {
-    this.e.emit(message, value);
-  }
-
   /**
    * this is the max version number present in this leaf, now.
    */
   _maxVersion() {
     let version = this.version === null ? 0 : this.version;
-    this.beach(branch => {
-      version = Math.max(version, branch._maxVersion());
+    this.beach(child => {
+      version = Math.max(version, child._maxVersion());
     });
 
     return version;
@@ -398,100 +500,18 @@ export default class Leaf {
     this.beach(b => b._flushJournal());
   }
 
-  // endregion
-
   broadcast() {
     this.emit('debug', ['broadcasting ', this.value]);
     if (!this.inTransaction && !this.isStopped) {
       this._subject.next(this.value);
     }
   }
-
-  beach(fn) {
-    if (!this._branches) {
-      return;
-    }
-    this.branches.forEach(fn);
-  }
-
-  addBranches(branches) {
-    if (this.isStopped) {
-      throw e('cannot add branches to stopped leaf', { leaf: this, branches });
-    }
-    if (Array.isArray(branches)) {
-      // transport value properties to sub-branches
-      branches.forEach(name => {
-        this.branch(name, getKey(this._value, name));
-      });
-    } else {
-      toMap(branches).forEach((branch, name) => {
-        this.branch(name, branch);
-      });
-    }
-  }
-
-  _branch(value, name) {
-    return new Leaf(value, { parent: this, name });
-  }
-
-  /**
-   * if no value, returns branch "name";
-   * if value is a branch, injects it as a branch at name;
-   * otherwise it creates a new branch with value value at name;
-   *
-   * if there is a '.' in the name, it recursively creates object nodes to create a nested branch.
-   * @param name
-   * @param value
-   */
-  branch(name: any, value: any = ABSENT) {
-    if (Array.isArray(name)) {
-      // @typescript-eslint/no-this-alias
-      let lastBranch = this;
-      name.forEach((nameItem, index) => {
-        if (index === name.length - 1) {
-          lastBranch = lastBranch.branch(nameItem, value);
-        } else {
-          const nextBranch = lastBranch.branch(nameItem);
-          if (!nextBranch) {
-            throw new Error(
-              `cannot resolve path ${name.join(
-                '.'
-              )} broke at ${nameItem}:${index}`
-            );
-          } else {
-            lastBranch = nextBranch;
-          }
-        }
-      });
-      return lastBranch;
-    }
-
-    if (typeof name === 'string' && name.indexOf('.') > 0) {
-      return this.branch(name.split(/\./g), value);
-    }
-
-    if (isThere(value)) {
-      // creating a new branch - either injecting a leaf-type branch or creating one with that value.
-      const branch = value instanceof Leaf ? value : this._branch(value, name);
-      branch.config({ name, parent: this });
-      this.branches.set(name, branch);
-      this.emit('change-from-branch', branch);
-    }
-
-    if (!this._branches) return undefined;
-    return this.branches.get(name);
-  }
-
-  branchEmit(message, value) {
-    this.beach(branch => {
-      branch.emit(message, value);
-    });
-  }
+  // endregion
 
   /**
    * ----------------- configuration ----------------------
    *
-   * note - each parent of Leaf (from dectorators) will override and delegate this method
+   * note - each parent of Leaf (from decorators) will override and delegate this method
    * to read its needed input. Technically - this method can be called more than once from the outside,
    * but that hasn't been thoroughly tested, and its a good idea to simply call the
    * methods like "addActions" or "addSelector(s)" to update your Leaf.
@@ -518,11 +538,13 @@ export default class Leaf {
     const {
       setters = null,
       parent = null,
-      branches = null,
+      children = null,
+      branches = null, // backwards compatibility from earlier version
       test,
       name,
       type,
       any,
+      res,
     } = opts;
     this._parent = parent;
     this._useSetters = setters; // should be in actions, but order of operations has issues
@@ -532,18 +554,25 @@ export default class Leaf {
       this.name = '[ROOT]';
     }
 
-    if (branches) this.addBranches(branches);
+    if (children) this.addChildren(children);
+    if (branches) this.addChildren(branches);
     if (any) {
       this.type = TYPE_ANY;
     } else if (type) {
       this.type = type === true ? detectType(this.value) : type;
     }
     if (typeof test === 'function') this.addTest(test);
+
+    if (res) {
+      toMap(res).forEach((res, name) => {
+        this.res(name, res);
+      });
+    }
   }
 
   /**
-   * snapshots all "dirty" branches with the passed-in version and updates the
-   * version of the branch.
+   * snapshots all "dirty" children with the passed-in version and updates the
+   * version of the child.
    * @param version
    * @return {Leaf[]} an array of dirty leaves;
    */
@@ -558,10 +587,10 @@ export default class Leaf {
       dirtyLeaves.push(this);
     }
 
-    this.beach(branch => {
-      const dirtyBranches = branch.setVersionOfDirtyLeaves(version);
-      if (dirtyBranches.length) {
-        dirtyLeaves = [...dirtyLeaves, ...dirtyBranches];
+    this.beach(child => {
+      const dirtyChiuldren = child.setVersionOfDirtyLeaves(version);
+      if (dirtyChiuldren.length) {
+        dirtyLeaves = [...dirtyLeaves, ...dirtyChiuldren];
       }
     });
 
@@ -570,6 +599,32 @@ export default class Leaf {
 
   // endregion
 
+  /** --------------------- resources (res) --------------------
+   * resources are any sort of configuration, utilities or other tools
+   * that are more or less static; used to augment actions or other functionality
+   */
+
+  // region res
+  private _res;
+  res(name, value = ABSENT) {
+    if (isThere(value)) {
+      // set mode
+      if (!this._res) {
+        this._res = new Map();
+      }
+      this._res.set(name, value);
+    } else {
+      // get mode
+      if (this._res) {
+        return this._res.get(name);
+      }
+      return undefined;
+    }
+  }
+
+  // endregion
+
+  // region transactions
   /**
    * token is an arbitrary object that is referentially unique. An object, Symbol. Not a scalar (string/number).
    * The significant trait of token is that when you popTrans (remove it from the trans collection,
@@ -682,9 +737,9 @@ export default class Leaf {
   // region io
   /**
    * get a map of change objects for each property in value
-   * that has been changed by the value from the current value of that branch.
+   * that has been changed by the value from the current value of that child.
    *
-   * If there are no branches, or none of the branch fields have been changed,
+   * If there are no children, or none of the child fields have been changed,
    * this method will return an empty Map.
    * @param value
    */
@@ -696,7 +751,7 @@ export default class Leaf {
   }
 
   /**
-   * updates the value of this branch.
+   * updates the value of this child.
    * @param value
    * @param direction
    */
@@ -748,10 +803,10 @@ export default class Leaf {
 
   set(name, value: any) {
     if (this._isStopped) {
-      throw e('cannot set after a branch is stopped', { name, value });
+      throw e('cannot set after a Leaf is stopped', { name, value });
     }
-    if (this._branches && this._branches.has(name)) {
-      this.branch(name).next(value);
+    if (this._children && this._children.has(name)) {
+      this.child(name).next(value);
     } else {
       switch (this.form) {
         case FORM_OBJECT:
@@ -804,9 +859,9 @@ export default class Leaf {
     if (!keys.length) return;
 
     keys.forEach(key => {
-      if (this._branches && this.branches.has(key)) {
-        this.branches.get(key).complete();
-        this.branches.delete(key);
+      if (this._children && this.children.has(key)) {
+        this.children.get(key).complete();
+        this.children.delete(key);
       }
 
       try {
@@ -885,12 +940,12 @@ export default class Leaf {
   }
 
   toJSON(network = false) {
-    if (network && this.branches.size) {
+    if (network && this.children.size) {
       const out = this.toJSON();
-      if (this._branches) {
-        out.branches = [];
+      if (this._children) {
+        out.children = [];
         this.beach(b => {
-          out.branches.push(b.toJSON(true));
+          out.children.push(b.toJSON(true));
         });
       }
       return out;
@@ -918,11 +973,11 @@ export default class Leaf {
   }
 
   complete() {
-    if (this._branches) {
-      this.beach(branch => {
-        branch.complete();
+    if (this._children) {
+      this.beach(child => {
+        child.complete();
       });
-      this.branches.clear();
+      this.children.clear();
     }
 
     if (this._subject) this._subject.complete();

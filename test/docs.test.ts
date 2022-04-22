@@ -11,6 +11,7 @@ describe('docs', () => {
             status: 'entering',
           },
           {
+          debug: true,
             selectors: {
               isReady({ username, password }) {
                 return !!(password && username);

@@ -3,19 +3,19 @@
 Forest is a curated state system. Designed to fit the missing niche of a quick, maangeable state
 system, it has an extensive commit cycle with validation, transactions and a streaming notifier.  
 
-# Leaves
+# Leafs
 
 A leaf is a management system for a single element of data. 
-Leafs can be centrally managed, or have branch managers delegated to manage properties in an object/Map leaf.
+Leafs can be centrally managed, or have child managers delegated to manage properties in an object/Map leaf.
 
-Branches are added to Leafs in one of the following methods: 
+Children are added to Leafs in one of the following methods: 
 
-Only Leaf instances whose value is an object, Map or array can have branches. Branches are not 
-automatic - not all of an objects' or Map's properties are managed with branches.
+Only Leaf instances whose value is an object, Map or array can have children. Children are not 
+automatic - not all of an objects' or Map's properties are managed with children.
 
-To create a Branch on a leaf you must define the leaf in either
+To create a child on a leaf you must define the leaf in either
 
-1. **configuration:** calling leaf with a branch's property in the second argument:
+1. **configuration:** calling leaf with a child's property in the second argument:
 
 ```javascript
 
@@ -24,7 +24,7 @@ const point = new Leaf({
   x: 0,
 },
   {
-    branches: {
+    children: {
       x: new Leaf(1),
       y: 2,
       z: 3
@@ -34,21 +34,22 @@ const point = new Leaf({
 console.log('leaf value:', point.value);
 // 'leaf value: ', {: 0, x: 1, y: 2: z: 3}
 
-leaf.branch('y').next(4);
+leaf.child('y').next(4);
 
 console.log('leaf value changed:', point.value);
 // 'leaf value changed: ', {: 0, x: 1, y: 4: z: 3}
 
 ```
 
-2. **dynamic:** you can call `myLeaf.branch(name, new Leaf(..))` to add a branch to
-   the leaf. `myLeaf.branch(name, value)` will also work initializing a basic leaf.
-   `myLeaf.branch(name)` or `myLeaf.branch(name, newBranchOrValue)` both return the branch itself. 
+2. **dynamic:** you can call `myLeaf.child(name, new Leaf(..))` to add a child to
+   the leaf. `myLeaf.child(name, value)` will also work initializing a basic leaf.
+   `myLeaf.child(name)` or `myLeaf.child(name, newBranchOrValue)` both return the child itself. 
 
-The value of sub-branches is you can localize validators or actions to affect sub-parts of the 
+The value of sub-children is you can localize validators or actions to affect sub-parts of the 
 leaf. This is how you achieve the reducer pattern with Malt. 
 
-Leaf can branch multiple times; as long as a branch is of type object/Map/array, it can have sub-branches applied to it.
+Leaf can nest children multiple times; as long as a child is of type object/Map/array, 
+it can have sub-children applied to it.
 
 ## Actions
 
@@ -57,7 +58,7 @@ Leaf actions are accessed off a `.do` object.
 
 ### Implicit (inferred) setters
 
-Map and object types will have a set[field] function for every key/property in the initial value, and every branch.
+Map and object types will have a set[field] function for every key/property in the initial value, and every child.
 
 ```javascript
 
@@ -71,16 +72,16 @@ console.log('point is now', point.value);
 
 ```
 
-note - this is by *default* true for only the root leaf. This is to reduce the overhead of multiple child branches
+note - this is by *default* true for only the root leaf. This is to reduce the overhead of multiple child children
 having actions that probably will never get called. 
 
-* if you want to enable setters for **all** branches in a leaf, pass {setters: 'all'} to the root leaf's 
+* if you want to enable setters for **all** children in a leaf, pass {setters: 'all'} to the root leaf's 
   options. 
-* if you want to selectively enable branches' setters, pass {setters: true} to the branches that you want to 
+* if you want to selectively enable children' setters, pass {setters: true} to the children that you want to 
   have setters. 
 
-By the way, every Leaf (or branch) has a `.set(name, value)` method; under the hood that is what setter
-functions use. So if you want to set a branches' key, but you don't want actions for each and every value of it
+By the way, every Leaf (or child) has a `.set(name, value)` method; under the hood that is what setter
+functions use. So if you want to set a children' key, but you don't want actions for each and every value of it
 to be created, you can use  `myLeaf.set('name', 'Bob')`. 
 
 ### User defined actions
@@ -221,16 +222,16 @@ console.log('user is ', user.value);
 A word of warning; `myName.do.set[field]` is **only one of the many ways a leaf's property's values can be changed.**
 
 * you can also change a leaf's property value by calling `myLeaf.next({key: value})`;
-* if the property is managed by a branch, you can call `myLeaf.branches('key').next(value)`.
+* if the property is managed by a child, you can call `myLeaf.child('key').next(value)`.
 * If the leaf is not a root, changes to a root can percolate upwards and change a leaf's property value by indirectly
   calling next (as above). 
 
-If you want a bulletproof way to constrain a leaf's property, put it under a branch with a throwing test. 
+If you want a bulletproof way to constrain a leaf's property, put it under a child with a throwing test. 
 
 ### Async actions
 
-Actions are designed to be **synchronous**; any errors that happen asynchronously are _NOT going to get trapped by the 
-try/catch_ around the transaction that contains the action. 
+Actions are designed to be **synchronous**; any errors that happen asynchronously 
+are _NOT going to get trapped by the try/catch_ around the transaction that contains the action. 
 
 If you want to use async systems in your leaf, you can either: 
 
@@ -267,7 +268,7 @@ leaf.do.setZ(5);
 
 ```
 
-if you want to delete keys from the value call `myLeaf.deleteKeys('x', 'y')`. Any matching branches will be completed
+if you want to delete keys from the value call `myLeaf.deleteKeys('x', 'y')`. Any matching children will be completed
 and deleted. 
 
 ```javascript
@@ -335,12 +336,12 @@ Your listener can be a function or an object dictionary of functions,
 
 ## `next(value)`
 
-Next signals an update for a leaf's value. Changes will percolate across any branches; complex forms
+Next signals an update for a leaf's value. Changes will percolate across any children; complex forms
 (Maps, objects) will attempt to blend (merge into, combine with) the existing value a la React's `setState()`.
 
 Next will throw if the update is not of the same form as the current value(unless `any` has been set to true),
 and will trigger any manual tests you may have written. The update of this value, its parent(s), and any changed 
-branch children will be atomic, wrapped via transact() 
+children will be atomic, wrapped via transact() 
 
 ## type and form
 
@@ -364,7 +365,7 @@ If *type* is set, Leaf restricts updates of scalar values to a more specific val
 You can also set the type explicitly using these constants, or an array of 
 constants `[TYPE_DATE, TYPE_NUMBER]` to accept any of several types/forms. 
 
-If you want to restrict the type of a leaf's properties, define a branch for that property
+If you want to restrict the type of a leaf's properties, define a child for that property
 with type = true in the options (or one of the constants defined above for specific expectations)
 
 ### `TYPE_ANY`
@@ -372,9 +373,9 @@ with type = true in the options (or one of the constants defined above for speci
 If you want to disable ALL type checking, pass `any` = true on configurations;
 this sets the type to TYPE_ANY and bypasses all form and type checking. 
 
-### A word of caution on branches and types
+### A word of caution on children and types
 
-The assumption made herein is that if you have a "parent" leaf with branches,
+The assumption made herein is that if you have a "parent" leaf with children,
 then it's a "container" leaf whose type (object, Map or array) is not changed
 on updates, and *should* not be changed. The form checks are designed to safeguard
 against this happening, but can be broken if you try real hard (or set any = true). 
@@ -442,18 +443,47 @@ numLeaf.next(10);
 
 ```
 
+## Res(ources)
+
+There are times you need to attach configuration, utilities, DOM items, or other things to a Leaf
+to tune the behavior of actions. One example of a resource is a URL for data i/o. 
+If a value (a) doesn't change often or ever, (b) is intended to be used mostly to change action behavior,
+(c) isn't likely to be needed by subscribers, it's a good candidate for res. 
+
+Res are also useful for injecting functionality you plan to override with mocks during testing. 
+
+You can set res by passing a map or object of values in options (see below). You can also update res
+by calling `myLeaf.res(name, value)` after creation. 
+
+res values are not monitored by transactions, events, etc.
+
+```javascript
+
+const dataEle = new Leaf(
+{ id: 100, name: 'Bob' },
+{
+  res: {
+    url: '/foo/bar',
+  },
+}
+);
+console.log(dataEle.res('url'));
+// '/foo/bar'
+
+```
+
 ## Options
 
 The second property of Leaf can be an object with any/all/none of these properties:
 
 * **name** - an identifier for the leaf. set/overridden for Leaf 
-  instances made/passed into `.branch(name, value)`
+  instances made/passed into `.child(name, value)`
 * **test** - a function; will be passed each change, as it is asserted;  
  if it returns anything "truthy" (not zero, null, etc),
   will block the updating of a Leaf.
 * **actions** - an object of name/function accessible off the `.do` object property of your Leaf.
-* **branches** - an object of name/branch values(or Leaf instances). Note, even if your Leaf
-  is a Map, your Branches can be defined by an object. 
+* **children** - an object of name/child values(or Leaf instances). Note, even if your Leaf
+  is a Map, your Children can be defined by an object. 
 * **type** - if true, then rejects any values that don't match the type (string, number, etc.)
   of the initial value; Also takes one of the type flags:
   - TYPE_STRING
@@ -466,11 +496,13 @@ The second property of Leaf can be an object with any/all/none of these properti
   - an array of acceptable types. 
 * **any** if true, disables ALL type / form checking.
 * **debug** - a boolean that if true, will echo extended data; used to develop Leaf code.
-* **setters** - whether to create set[field] actions in the leaf. By default, branches do not 
-  have setter actions; set root leaf's setters options to 'all' to activate branch actions, or set individual
-  branch 'setters' option to true to selectively actviate them.
+* **res** - an object or map of key/values for tuning actions. 
+* **setters** - whether to create set[field] actions in the leaf. By default, children do not 
+  have setter actions; set root leaf's setters options to 'all' to activate child actions, or set individual
+  child 'setters' option to true to selectively activate them.
+
   You can set/extend these values post-creation by calling `.config(opts)` to, say, add
-some actions or branches to a Leaf instance at any time. 
+  some actions or children to a Leaf instance at any time. 
 
   ## `.complete()` and `.isStopped`
 
@@ -493,7 +525,7 @@ your leaf is still active.
 
 LeafImmer is a class with all the properties of Leaf that wraps values with the Immer immutable producers. 
 The value of a LeafImmer will be a frozen value, and won't have any referential links between any values in the leaf. 
-LeafImmer instances can be used as branches for Leafs, but it's inadvisable to use Leaf branches as children of 
+LeafImmer instances can be used as children for Leafs, but it's inadvisable to use Leaf children as children of 
 LeafImmer instances.
 
 There are no API or usage differences between LeafImmer and Leaf, other than the fact that LeafImmer can only accept
