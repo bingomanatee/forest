@@ -288,3 +288,11 @@ export function makeNew(type, isInstance = false) {
 
   return out;
 }
+
+export function getOrCatch(fn: () => any) {
+  try {
+    return fn();
+  } catch (err) {
+    return err;
+  }
+}

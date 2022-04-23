@@ -25,6 +25,14 @@ export default function WithSelectors(Cons) {
       }
     }
 
+    get value() {
+      return this.valueWithSelectors();
+    }
+
+    set value(next) {
+      this.baseValue = next;
+    }
+
     _$?: any | null;
     _localSelectors = false;
     _$snapshot?: Map<any, any>;
@@ -49,7 +57,7 @@ export default function WithSelectors(Cons) {
         this._$snapshot = mapReduce(
           this.$,
           (out, selector) => {
-            out.set('$' + selector.name, selector.baseValue);
+            out.set('$' + selector.name, selector.value);
             return out;
           },
           new Map()
@@ -126,7 +134,7 @@ export default function WithSelectors(Cons) {
     selector(name) {
       if (this._$) {
         if (this.$.has(name)) {
-          return this.$.get(name).baseValue;
+          return this.$.get(name).value;
         }
       }
       return undefined;

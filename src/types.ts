@@ -33,6 +33,7 @@ export type LeafType = {
   debug: boolean;
   toJSON: Function;
   valueWithSelectors: (value?: any) => any;
+  hasSelectors: boolean;
 };
 
 export type SelectorType = NonNullable<{
@@ -40,3 +41,30 @@ export type SelectorType = NonNullable<{
   value: any;
   args: strNum[];
 }>;
+
+export enum SnapshotStatus {
+  past,
+  current,
+  pending,
+  revoked,
+}
+
+export class LeafV2Interface {
+  value: any;
+  baseValue: any;
+  version: number | undefined = 0;
+  errors: any;
+}
+
+export type SnapshotType = {
+  value: any;
+  baseValue: any;
+  version: number;
+  status: SnapshotStatus;
+  errors: any[];
+  addError(err: any);
+};
+
+export type LeafV2ConfigType = {
+  test?: (value: any, target?: LeafV2Interface) => any;
+};

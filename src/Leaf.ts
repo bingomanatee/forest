@@ -11,6 +11,7 @@ import {
   flattenDeep,
   getKey,
   isArr,
+  isNum,
   isThere,
   toMap,
 } from './utils';
@@ -376,6 +377,10 @@ export default class Leaf {
 
   get $$() {
     return new Map();
+  }
+
+  get hasSelectors(): boolean {
+    return false;
   }
 
   //endregion
@@ -894,7 +899,11 @@ export default class Leaf {
   // region snapshot
 
   snapshot(version = 0) {
-    this.history.set(version, this.baseValue);
+    if (isNum(version))
+      this.history.set(version, {
+        baseValue: this.baseValue,
+        value: this.value,
+      });
   }
 
   /**
@@ -907,7 +916,7 @@ export default class Leaf {
       if (this._history.has(version)) {
         return {
           version,
-          value: this._history.get(version),
+          ...this._history.get(version),
         };
       }
 
@@ -918,7 +927,7 @@ export default class Leaf {
         // @ts-ignore
         if (foundVersion === null || foundVersion < hVersion) {
           foundVersion = hVersion;
-          foundValue = value;
+          foundValue = value.baseValue;
         }
       });
       if (foundVersion === null) return null;

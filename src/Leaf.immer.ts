@@ -12,10 +12,10 @@ import { Change } from './Change';
 import produce, { isDraftable } from 'immer';
 
 export default class LeafImmer extends Leaf {
-  get value() {
+  get baseValue() {
     return this._value;
   }
-  set value(value) {
+  set baseValue(value) {
     let nextValue = value;
 
     switch (detectForm(value)) {

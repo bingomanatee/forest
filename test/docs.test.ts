@@ -11,7 +11,7 @@ describe('docs', () => {
             status: 'entering',
           },
           {
-          debug: true,
+            debug: false,
             selectors: {
               isReady({ username, password }) {
                 return !!(password && username);
@@ -93,7 +93,7 @@ describe('docs', () => {
       try {
         point.next('Bob');
       } catch (err) {
-        console.log('bad form error: ', err);
+        // console.log('bad form error: ', err);
       }
       point.next({ x: 5, y: 6 });
 
@@ -107,12 +107,12 @@ describe('docs', () => {
 
     it('will not enforce form if any', () => {
       const point = new Leaf({ x: 1, y: 2 }, { any: true });
-      point.subscribe(value => console.log('value of  unguarded point', value));
+      //  point.subscribe(value => console.log('value of  unguarded point', value));
       point.next({ x: 3, y: 4 });
       try {
         point.next('Bob');
       } catch (err) {
-        console.log('unguarded bad form error: ', err);
+        //  console.log('unguarded bad form error: ', err);
       }
       point.next({ x: 5, y: 6 });
 
@@ -152,7 +152,7 @@ describe('docs', () => {
             updateAll(leaf, x, y, z) {
               leaf.do.setX(x);
               leaf.do.setY(y);
-              console.log('leafs y is now ', leaf.value.y);
+              // console.log('leafs y is now ', leaf.value.y);
               leaf.do.setZ(z);
               if (typeof y !== 'number') throw new Error('why?');
             },
@@ -173,7 +173,7 @@ describe('docs', () => {
       } catch (err) {
         // console.log('error:', err);
       }
-      console.log('current value of leaf: ', leaf.value);
+      //  console.log('current value of leaf: ', leaf.value);
     });
   });
 
@@ -240,7 +240,7 @@ describe('docs', () => {
         },
       });
 
-      fibo.subscribe(value => console.log('fibonacci series is now ', value));
+      //   fibo.subscribe(value => console.log('fibonacci series is now ', value));
       fibo.do.nextValue();
       fibo.do.nextValue(5);
       fibo.do.nextValue(2);
@@ -261,15 +261,15 @@ describe('docs', () => {
     });
   });
 
-  fdescribe('type', () => {
-    fit('should break on type exception', () => {
+  describe('type', () => {
+    it('should break on type exception', () => {
       const num = new Leaf(100, { type: true });
       const numUntyped = new Leaf(100);
       const numAny = new Leaf(100, { any: true });
 
-      num.subscribe(value => console.log('num value: ', value));
-      numUntyped.subscribe(value => console.log('numUntyped value: ', value));
-      numAny.subscribe(value => console.log('numAny value: ', value));
+      // num.subscribe(value => console.log('num value: ', value));
+      // numUntyped.subscribe(value => console.log('numUntyped value: ', value));
+      // numAny.subscribe(value => console.log('numAny value: ', value));
 
       num.next(200);
       numUntyped.next(200);
@@ -277,7 +277,7 @@ describe('docs', () => {
       try {
         num.next('three hundred');
       } catch (err) {
-        console.log('type error:', err);
+        //  console.log('type error:', err);
       }
       numUntyped.next('three hundred');
       numAny.next('three hundred');
@@ -288,13 +288,13 @@ describe('docs', () => {
       try {
         num.next([500]);
       } catch (err) {
-        console.log('num form error: ', err);
+        // console.log('num form error: ', err);
       }
 
       try {
         numUntyped.next([500]);
       } catch (err) {
-        console.log('numUntyped form error: ', err);
+        // console.log('numUntyped form error: ', err);
       }
       numAny.next([500]);
 
