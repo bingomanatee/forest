@@ -49,7 +49,7 @@ export default function WithSelectors(Cons) {
         this._$snapshot = mapReduce(
           this.$,
           (out, selector) => {
-            out.set('$' + selector.name, selector.baseValue);
+            out.set('$' + selector.name, selector.value);
             return out;
           },
           new Map()
