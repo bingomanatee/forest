@@ -23,6 +23,7 @@ Introduced selectors; further code cleanup
 
 Adding res(ources);
 
-## 1.0.10
+## 1.0.10,11
 
 changing name of "branch/branches" to "child/children"
+refactoring several components; 
