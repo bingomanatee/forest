@@ -1,48 +1,24 @@
 /* eslint-disable @typescript-eslint/camelcase,@typescript-eslint/no-this-alias */
 import Leaf from './Leaf';
-import { delKeys, detectForm } from './utils';
-import { ABSENT, FORM_ARRAY, FORM_MAP, FORM_OBJECT } from './constants';
+import { delKeys, setKey } from './utils';
+import { ABSENT, CHANGE_DOWN } from './constants';
 
-import produce, { isDraftable } from 'immer';
+import produce, { enableMapSet } from 'immer';
+
+enableMapSet();
 
 export default class LeafImmer extends Leaf {
-  get value() {
-    return this._value;
-  }
-  set value(value) {
-    let nextValue = value;
-
-    switch (detectForm(value)) {
-      case FORM_MAP:
-      case FORM_OBJECT:
-      case FORM_ARRAY:
-        if (isDraftable(value)) {
-          try {
-            nextValue = produce(value, draft => draft);
-            this.emit('debug', [
-              'nextValue set to ',
-              nextValue,
-              'from ',
-              nextValue,
-            ]);
-          } catch (err) {
-            nextValue = value;
-          }
-        }
-        break;
-    }
-
-    this.emit('debug', [
-      'leafImmer set: nextValue = ',
-      nextValue,
-      'value = ',
-      value,
-    ]);
-    this._value = nextValue;
-    if (this._isInitialized) this._dirty = true;
+  amend(key, value) {
+    const next = produce(this.baseValue, draft => {
+      setKey(draft, key, value, this.form);
+    });
+    this.next(next, CHANGE_DOWN);
   }
 
   valueWithSelectors(value = ABSENT) {
+    if (value === ABSENT) {
+      value = this.baseValue;
+    }
     try {
       return produce(value, draft => {
         super.valueWithSelectors(draft);

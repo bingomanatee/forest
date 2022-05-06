@@ -12,11 +12,13 @@ import {
   getKey,
   isArr,
   isThere,
+  setKey,
   toMap,
 } from './utils';
 import {
   ABSENT,
   CHANGE_ABSOLUTE,
+  CHANGE_DOWN,
   FORM_ARRAY,
   FORM_MAP,
   FORM_OBJECT,
@@ -722,6 +724,12 @@ export default class Leaf {
 
   get subject(): SubjectLike<any> {
     return this._subject;
+  }
+
+  amend(key, value) {
+    const next = clone(this.baseValue);
+    setKey(next, key, value, this.form);
+    this.next(next, CHANGE_DOWN);
   }
 
   /**

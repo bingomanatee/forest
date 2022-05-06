@@ -7,16 +7,7 @@ import {
   TYPE_ANY,
 } from '../constants';
 import { LeafType } from '../types';
-import {
-  clone,
-  detectForm,
-  detectType,
-  e,
-  getKey,
-  hasKey,
-  isArr,
-  setKey,
-} from '../utils';
+import { detectForm, detectType, e, getKey, hasKey, isArr } from '../utils';
 
 function childChanges(target, value): Map<LeafType, any> {
   const childChanges = new Map();
@@ -98,14 +89,7 @@ export default function listenForChange(target) {
 
   target.on('change-from-child', (child: LeafType) => {
     if (child.name && target.child(child.name) === child) {
-      const value = clone(target.baseValue);
-      const branchValue = child.valueWithSelectors();
-      setKey(value, child.name, branchValue, target.form);
-      target.emit('debug', {
-        n: 2,
-        message: ['--- >>>>>>>>> changing from child ', child.name],
-      });
-      target.next(value, CHANGE_DOWN);
+      target.amend(child.name, child.valueWithSelectors());
     }
   });
 
