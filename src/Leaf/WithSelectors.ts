@@ -5,6 +5,10 @@ import { Selector } from '../Selector';
 import { map, SubjectLike } from 'rxjs';
 
 export default function WithSelectors(Cons) {
+  /**
+   * manages computed fields
+   * @TODO: freeze updating while computing selectors
+   */
   return class LeafWithSelectors extends Cons {
     config(opts) {
       super.config(opts);
@@ -62,13 +66,13 @@ export default function WithSelectors(Cons) {
     valueWithSelectors(value: any = ABSENT) {
       if (value === ABSENT) {
         if (this._localSelectors) {
-          return this.value;
+          return this.baseValue;
         }
-        value = this.value;
+        value = this.baseValue;
       }
 
       if (!this.hasSelectors) {
-        return this.value;
+        return value;
       }
 
       let out = value;
@@ -113,6 +117,10 @@ export default function WithSelectors(Cons) {
       return out;
     }
 
+    get value() {
+      return this.valueWithSelectors();
+    }
+
     addSelectors(selectors) {
       toMap(selectors).forEach((selector, name) => {
         this.addSelector(name, selector);
@@ -120,10 +128,8 @@ export default function WithSelectors(Cons) {
     }
 
     selector(name) {
-      if (this._$) {
-        if (this.$.has(name)) {
-          return this.$.get(name).value;
-        }
+      if (this._$ && this.$.has(name)) {
+        return this.$.get(name).value;
       }
       return undefined;
     }

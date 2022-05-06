@@ -12,11 +12,13 @@ import {
   getKey,
   isArr,
   isThere,
+  setKey,
   toMap,
 } from './utils';
 import {
   ABSENT,
   CHANGE_ABSOLUTE,
+  CHANGE_DOWN,
   FORM_ARRAY,
   FORM_MAP,
   FORM_OBJECT,
@@ -48,7 +50,7 @@ export default class Leaf {
   constructor(value: any, opts: any = {}) {
     this.debug = !!opts.debug;
     listenForChange(this);
-    this.value = value;
+    this.baseValue = value;
     this._transList = [];
     this.config(opts);
 
@@ -193,7 +195,7 @@ export default class Leaf {
   }
 
   _childEmit(message, value) {
-    this.beach(child => {
+    this.eachChild(child => {
       child.emit(message, value);
     });
   }
@@ -258,7 +260,7 @@ export default class Leaf {
   //region value
   public _value: any = ABSENT;
 
-  get value(): any {
+  get baseValue(): any {
     return this._value;
   }
 
@@ -267,7 +269,7 @@ export default class Leaf {
    * the values of the update are sent out to the children which can reinterpret them.
    * @param value
    */
-  set value(value: any) {
+  set baseValue(value: any) {
     if (this._value === value) return;
     this._value = value;
     if (this.isInitialized) {
@@ -275,6 +277,15 @@ export default class Leaf {
     } else {
       this._subject.next(value);
     }
+  }
+
+  get value() {
+    // overridden in WithSelectors
+    return this.baseValue;
+  }
+
+  set value(nextValue) {
+    this.baseValue = nextValue;
   }
 
   get historyString() {
@@ -358,7 +369,7 @@ export default class Leaf {
    * @param _value
    */
   valueWithSelectors(_value?: any) {
-    return this.value;
+    return _value;
   }
 
   get $() {
@@ -379,7 +390,7 @@ export default class Leaf {
       transactions are global and managed from the root of the tree.
       They are stored in an array and tracked in a BehaviorSubject
       that stores a set from that array.
-  
+
       The nature of what token is stored in the array is not really important
       as long as its referentially unique; as such, symbols make good
       transaction tokens.
@@ -412,7 +423,7 @@ export default class Leaf {
    * less specific than type.
    */
   get form() {
-    return detectForm(this.value);
+    return detectForm(this.baseValue);
   }
 
   get do(): doType {
@@ -429,41 +440,6 @@ export default class Leaf {
    * note: every time you update value its leaf is marked as 'dirty"
    * to flag it as having been changed for step 4.
    *
-   * - the short version is:
-   * - update values up and down the tree,
-   *     flagging changes as dirty and validating as we go
-   *
-   * next() is transactional wrapped, so in the absence of errors it* will:
-   * - set the version of dirty values
-   * - journal the changes
-   * - broadcast to any subscribers
-   *
-   * // note this section is WAY OUT OF DATE:
-   * // @TODO: update documentation.
-   * the long version: next
-   * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
-   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange) which executes the following:
-   *    (in a transaction)
-   * 3. set the value passed in; merges any structures(objects/maps) from previous values.
-   * 4. creates a rootChange
-   *       emit('change', rootChange) -- triggers any tests which may throw
-   * 5. _changeUp(value) -- update changed fields to children,
-   *       recursively changeUp for any subProps
-   * 6. _changeDown()
-   *        i. _changeFromChild(this);
-   *        ii. inject this updated value into its parent
-   *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
-   *
-   * If there are any errors all changes after the beginning of next() are rolled back.
-   *
-   * otherwise, at the close of any outermost transactions where changes were made:
-   *
-   * 7. advance the version of dirty values
-   * 8. journal the changes
-   * 9. broadcast to any subscribers
-   *
-   * (*) technically the *outermost transaction* will do a lot of these things, so either next's transaction,
-   *     or a transaction containing it, will eventually do the advancement/journaling.
    */
 
   // region next
@@ -482,7 +458,7 @@ export default class Leaf {
    */
   _maxVersion() {
     let version = this.version === null ? 0 : this.version;
-    this.beach(child => {
+    this.eachChild(child => {
       version = Math.max(version, child._maxVersion());
     });
 
@@ -497,13 +473,13 @@ export default class Leaf {
     }
     this._dirty = false;
     this.snapshot(0);
-    this.beach(b => b._flushJournal());
+    this.eachChild(b => b._flushJournal());
   }
 
   broadcast() {
-    this.emit('debug', ['broadcasting ', this.value]);
+    this.emit('debug', ['broadcasting ', this.baseValue]);
     if (!this.inTransaction && !this.isStopped) {
-      this._subject.next(this.value);
+      this._subject.next(this.baseValue);
     }
   }
   // endregion
@@ -559,7 +535,7 @@ export default class Leaf {
     if (any) {
       this.type = TYPE_ANY;
     } else if (type) {
-      this.type = type === true ? detectType(this.value) : type;
+      this.type = type === true ? detectType(this.baseValue) : type;
     }
     if (typeof test === 'function') this.addTest(test);
 
@@ -587,7 +563,7 @@ export default class Leaf {
       dirtyLeaves.push(this);
     }
 
-    this.beach(child => {
+    this.eachChild(child => {
       const dirtyChiuldren = child.setVersionOfDirtyLeaves(version);
       if (dirtyChiuldren.length) {
         dirtyLeaves = [...dirtyLeaves, ...dirtyChiuldren];
@@ -701,7 +677,7 @@ export default class Leaf {
     if (!this.inTransaction) {
       this.emit('debug', [
         `----------!!------------ done with set value:`,
-        this.value,
+        this.baseValue,
         `of ${this.name}not in trans - advancing`,
       ]);
 
@@ -748,6 +724,12 @@ export default class Leaf {
 
   get subject(): SubjectLike<any> {
     return this._subject;
+  }
+
+  amend(key, value) {
+    const next = clone(this.baseValue);
+    setKey(next, key, value, this.form);
+    this.next(next, CHANGE_DOWN);
   }
 
   /**
@@ -818,7 +800,7 @@ export default class Leaf {
           break;
 
         case FORM_ARRAY:
-          const next = [...this.value];
+          const next = [...this.baseValue];
           if (typeof name === 'number') {
             if (Array.isArray(value)) {
               next.splice(name, value.length, ...value);
@@ -839,7 +821,7 @@ export default class Leaf {
   }
 
   get(name): any {
-    return getKey(this.value, name, this.form);
+    return getKey(this.baseValue, name, this.form);
   }
 
   // endregion
@@ -849,7 +831,7 @@ export default class Leaf {
   // region delkeys
 
   _delKeys(keys) {
-    return delKeys(clone(this.value), keys);
+    return delKeys(clone(this.baseValue), keys);
   }
 
   delKeys(...keys) {
@@ -885,7 +867,7 @@ export default class Leaf {
   // region snapshot
 
   snapshot(version = 0) {
-    this.history.set(version, this.value);
+    this.history.set(version, this.baseValue);
   }
 
   /**
@@ -918,7 +900,7 @@ export default class Leaf {
     if (this.version !== null && this.version <= version) {
       return {
         version: this.version,
-        value: this.value,
+        value: this.baseValue,
       };
     }
     return null;
@@ -944,7 +926,7 @@ export default class Leaf {
       const out = this.toJSON();
       if (this._children) {
         out.children = [];
-        this.beach(b => {
+        this.eachChild(b => {
           out.children.push(b.toJSON(true));
         });
       }
@@ -953,7 +935,7 @@ export default class Leaf {
 
     const out: any = {
       name: this.name,
-      value: this.value,
+      value: this.baseValue,
       version: this.version,
       history: this.historyString,
     };
@@ -974,7 +956,7 @@ export default class Leaf {
 
   complete() {
     if (this._children) {
-      this.beach(child => {
+      this.eachChild(child => {
         child.complete();
       });
       this.children.clear();

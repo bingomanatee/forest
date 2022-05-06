@@ -194,11 +194,11 @@ export default function WithActions(Cons) {
         return;
       }
 
-      this.beach((_branch, key) => {
+      this.eachChild((_branch, key) => {
         this.addSetter(key, true);
       });
 
-      keys(this.value).forEach(key => {
+      keys(this.baseValue).forEach(key => {
         this.addSetter(key, true);
       });
 

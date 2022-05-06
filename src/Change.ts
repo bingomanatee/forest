@@ -54,14 +54,14 @@ export class Change {
       isCompound(target.form)
     ) {
       try {
-        updatedValue = makeValue(target.value, value);
+        updatedValue = makeValue(target.baseValue, value);
       } catch (err) {
         updatedValue = value;
       }
     }
     target.emit('debug', [
       'Leaf --- >>> _makeChange setting value from ',
-      target.value,
+      target.baseValue,
       ' to ',
       updatedValue,
       'from ',

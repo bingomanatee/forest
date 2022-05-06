@@ -4,6 +4,7 @@ export type doType = { [key: string]: Function };
 
 export type LeafType = {
   value: any;
+  baseValue: any;
   name: any;
   next: (any, direction?: symboly) => void;
 

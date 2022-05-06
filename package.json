@@ -25,6 +25,7 @@
       "pre-commit": "tsdx lint"
     }
   },
+  "homepage": "https://forest-docs.vercel.app/",
   "prettier": {
     "printWidth": 80,
     "semi": true,
