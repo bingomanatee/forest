@@ -21,7 +21,7 @@ import {
 function childChanges(target, value): Map<LeafType, any> {
   const childChanges = new Map();
 
-  target.beach((child, name) => {
+  target.eachChild((child, name) => {
     //@TODO: type test now?
     if (hasKey(value, name, target.form)) {
       const newValue = getKey(value, name, target.form);

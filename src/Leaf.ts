@@ -193,7 +193,7 @@ export default class Leaf {
   }
 
   _childEmit(message, value) {
-    this.beach(child => {
+    this.eachChild(child => {
       child.emit(message, value);
     });
   }
@@ -367,7 +367,7 @@ export default class Leaf {
    * @param _value
    */
   valueWithSelectors(_value?: any) {
-    return this.baseValue;
+    return _value;
   }
 
   get $() {
@@ -438,41 +438,6 @@ export default class Leaf {
    * note: every time you update value its leaf is marked as 'dirty"
    * to flag it as having been changed for step 4.
    *
-   * - the short version is:
-   * - update values up and down the tree,
-   *     flagging changes as dirty and validating as we go
-   *
-   * next() is transactional wrapped, so in the absence of errors it* will:
-   * - set the version of dirty values
-   * - journal the changes
-   * - broadcast to any subscribers
-   *
-   * // note this section is WAY OUT OF DATE:
-   * // @TODO: update documentation.
-   * the long version: next
-   * 1. calls _checkType to validate the new format (array, Map, object, scalar) is the same as the old one.
-   * 2. _changeValue: inside a transaction (traps any thrown error into rootChange) which executes the following:
-   *    (in a transaction)
-   * 3. set the value passed in; merges any structures(objects/maps) from previous values.
-   * 4. creates a rootChange
-   *       emit('change', rootChange) -- triggers any tests which may throw
-   * 5. _changeUp(value) -- update changed fields to children,
-   *       recursively changeUp for any subProps
-   * 6. _changeDown()
-   *        i. _changeFromChild(this);
-   *        ii. inject this updated value into its parent
-   *        iii. parent.next(updated, CHANGE_DOWN) updates the value all the way to the root.
-   *
-   * If there are any errors all changes after the beginning of next() are rolled back.
-   *
-   * otherwise, at the close of any outermost transactions where changes were made:
-   *
-   * 7. advance the version of dirty values
-   * 8. journal the changes
-   * 9. broadcast to any subscribers
-   *
-   * (*) technically the *outermost transaction* will do a lot of these things, so either next's transaction,
-   *     or a transaction containing it, will eventually do the advancement/journaling.
    */
 
   // region next
@@ -491,7 +456,7 @@ export default class Leaf {
    */
   _maxVersion() {
     let version = this.version === null ? 0 : this.version;
-    this.beach(child => {
+    this.eachChild(child => {
       version = Math.max(version, child._maxVersion());
     });
 
@@ -506,7 +471,7 @@ export default class Leaf {
     }
     this._dirty = false;
     this.snapshot(0);
-    this.beach(b => b._flushJournal());
+    this.eachChild(b => b._flushJournal());
   }
 
   broadcast() {
@@ -596,7 +561,7 @@ export default class Leaf {
       dirtyLeaves.push(this);
     }
 
-    this.beach(child => {
+    this.eachChild(child => {
       const dirtyChiuldren = child.setVersionOfDirtyLeaves(version);
       if (dirtyChiuldren.length) {
         dirtyLeaves = [...dirtyLeaves, ...dirtyChiuldren];
@@ -953,7 +918,7 @@ export default class Leaf {
       const out = this.toJSON();
       if (this._children) {
         out.children = [];
-        this.beach(b => {
+        this.eachChild(b => {
           out.children.push(b.toJSON(true));
         });
       }
@@ -983,7 +948,7 @@ export default class Leaf {
 
   complete() {
     if (this._children) {
-      this.beach(child => {
+      this.eachChild(child => {
         child.complete();
       });
       this.children.clear();

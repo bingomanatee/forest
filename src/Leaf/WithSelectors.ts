@@ -72,7 +72,7 @@ export default function WithSelectors(Cons) {
       }
 
       if (!this.hasSelectors) {
-        return this.baseValue;
+        return value;
       }
 
       let out = value;
@@ -117,6 +117,10 @@ export default function WithSelectors(Cons) {
       return out;
     }
 
+    get value() {
+      return this.valueWithSelectors(this.baseValue);
+    }
+
     addSelectors(selectors) {
       toMap(selectors).forEach((selector, name) => {
         this.addSelector(name, selector);
@@ -124,10 +128,8 @@ export default function WithSelectors(Cons) {
     }
 
     selector(name) {
-      if (this._$) {
-        if (this.$.has(name)) {
-          return this.$.get(name).baseValue;
-        }
+      if (this._$ && this.$.has(name)) {
+        return this.$.get(name).value;
       }
       return undefined;
     }

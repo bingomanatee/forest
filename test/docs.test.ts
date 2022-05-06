@@ -11,7 +11,7 @@ describe('docs', () => {
             status: 'entering',
           },
           {
-          debug: true,
+            debug: true,
             selectors: {
               isReady({ username, password }) {
                 return !!(password && username);
@@ -267,9 +267,9 @@ describe('docs', () => {
       const numUntyped = new Leaf(100);
       const numAny = new Leaf(100, { any: true });
 
-      num.subscribe(value => console.log('num value: ', value));
-      numUntyped.subscribe(value => console.log('numUntyped value: ', value));
-      numAny.subscribe(value => console.log('numAny value: ', value));
+      //num.subscribe(value => console.log('num value: ', value));
+      // numUntyped.subscribe(value => console.log('numUntyped value: ', value));
+      //  numAny.subscribe(value => console.log('numAny value: ', value));
 
       num.next(200);
       numUntyped.next(200);
@@ -277,7 +277,7 @@ describe('docs', () => {
       try {
         num.next('three hundred');
       } catch (err) {
-        console.log('type error:', err);
+        // console.log('type error:', err);
       }
       numUntyped.next('three hundred');
       numAny.next('three hundred');
@@ -288,13 +288,13 @@ describe('docs', () => {
       try {
         num.next([500]);
       } catch (err) {
-        console.log('num form error: ', err);
+        // console.log('num form error: ', err);
       }
 
       try {
         numUntyped.next([500]);
       } catch (err) {
-        console.log('numUntyped form error: ', err);
+        // console.log('numUntyped form error: ', err);
       }
       numAny.next([500]);
 
