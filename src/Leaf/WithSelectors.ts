@@ -118,7 +118,7 @@ export default function WithSelectors(Cons) {
     }
 
     get value() {
-      return this.valueWithSelectors(this.baseValue);
+      return this.valueWithSelectors();
     }
 
     addSelectors(selectors) {
