@@ -652,7 +652,7 @@ export class Leaf implements leafI {
 
   setMeta(key: any, value: any, force = false) {
     if (!force && this.hasMeta(key)) {
-      console.warn('meta cannot be overwritten without "forcing" it (third parameter = true)');
+      console.warn('meta cannot be overwritten without "forcing" it (third parameter = true); field:', key, 'value:', value, 'target:', this);
       return this;
     }
     if (!this._meta) {
