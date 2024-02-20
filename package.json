@@ -1,6 +1,6 @@
 {
   "name": "@wonderlandlabs/forest",
-  "version": "2.0.13",
+  "version": "2.0.14",
   "description": "React State Machine",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -30,9 +30,9 @@
   "author": "David Edelhart",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/hebertcisco/ts-npm-package-boilerplate/issues"
+    "url": "https://github.com/bingomanatee/forest/issues"
   },
-  "homepage": "https://github.com/hebertcisco/ts-npm-package-boilerplate#readme",
+  "homepage": "https://github.com/bingomanatee/forest",
   "devDependencies": {
     "@types/jest": "29.2.4",
     "@types/lodash.clonedeep": "^4.5.0",

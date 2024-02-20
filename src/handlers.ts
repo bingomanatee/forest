@@ -59,7 +59,9 @@ export const handlers = (leafMgr: LeafManager) => ({
           trans.transactionSet.do('update', childId, value, true);
         } else {
           leafMgr.backupLeaf(leafId);
-          target.store.set(key, value);
+          const store = target.store.clone();
+          store.set(key, value);
+          trans.transactionSet.do('update', leafId, store.value, true);
         }
         if (!fromChild && target.parent) {
           trans.transactionSet.do('updateFromChild', target.parentId, leafId);
